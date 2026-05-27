@@ -884,7 +884,7 @@ const Level1Scene = {
     this.finished = false;
     this.finishTimer = 0;
     this.nextGroundCar = 3300;
-    this.nextFlyingCar = 3700;
+    this.nextFlyingCar = 3450;
     this.spawnCooldown = 0;
     this.hitFlash = 0;
     this.cloudX = [];
@@ -897,13 +897,15 @@ const Level1Scene = {
       this.cloudX.push({ x: 100 + i*550, y: 20 + Math.random()*40, w: 40+Math.random()*30, speed: 0.2+Math.random()*0.1 });
     }
 
-    // Pre-spawn obstacles with clear 400-550px gaps between each threat
+    // Pre-spawn obstacles — alternating ground/flying with 350-500px gaps.
+    // Flying cars are head-height: run under them (jumping gets you hit).
     this.spawnGroundCar(400);
     this.spawnGroundCar(850);
-    this.spawnFlyingCar(1350);
-    this.spawnGroundCar(1900);
-    this.spawnFlyingCar(2450);
-    this.spawnGroundCar(3050);
+    this.spawnFlyingCar(1250);
+    this.spawnGroundCar(1750);
+    this.spawnFlyingCar(2100);
+    this.spawnGroundCar(2600);
+    this.spawnFlyingCar(2950);
   },
 
   spawnGroundCar(wx) {
@@ -916,11 +918,11 @@ const Level1Scene = {
 
   spawnFlyingCar(wx) {
     const type = Math.floor(Math.random()*4);
-    // Place flying cars at Connor's running height so the player must jump to avoid.
-    // Connor on ground occupies y=200-220; peak jump reaches y=160-180.
-    // flyY 186-196 overlaps Connor's run zone, sits 10-20px above the road visually,
-    // and clears Connor's jump arc (160-180) → always avoidable by jumping.
-    const flyY = this.groundY - 34 + Math.floor(Math.random() * 10); // 186-196
+    // Flying cars sit just above Connor's head so the player must run UNDER them.
+    // Connor running occupies y=200-220 (head at 200); peak jump reaches y=160-180.
+    // flyY 165-171 means car bottom is at 181-187 — clears Connor's head (200) by 13-19px
+    // but overlaps his jump arc (160-180), so jumping into one deals damage.
+    const flyY = this.groundY - 55 + Math.floor(Math.random() * 6); // 165-171
     const speed = 1.8 + Math.random() * 1.5;
     this.flyingCars.push({ wx, flyY, type, speed, frame: 0 });
   },
@@ -1005,7 +1007,7 @@ const Level1Scene = {
     }
     if (spawnAhead > this.nextFlyingCar && this.nextFlyingCar < this.gasStationX - 200) {
       this.spawnFlyingCar(this.nextFlyingCar);
-      this.nextFlyingCar += 550 + Math.random()*200;
+      this.nextFlyingCar += 380 + Math.random()*170;
     }
 
     // ── UPDATE GROUND CARS ──
