@@ -322,25 +322,36 @@ function drawFlyingCar(x, y, type, frame) {
   border(x, y+5, w, h-5, C.black);
 }
 
-// ── DRAW DOLLAR COIN ─────────────────────────────────────────────────────────
-function drawDollar(x, y, t) {
-  const bob = Math.sin(t * 5 + x * 0.07) * 2;
+// ── DRAW DOLLAR BILL (18×10 px) ──────────────────────────────────────────────
+function drawDollarBill(x, y, t) {
+  const bob = Math.sin(t * 4 + x * 0.05) * 2;
   x = Math.floor(x); y = Math.floor(y + bob);
-  // Outer coin (gold)
-  ctx.fillStyle = C.yellow;
-  ctx.beginPath(); ctx.arc(x+5, y+5, 5, 0, Math.PI*2); ctx.fill();
-  // Sheen highlight
-  ctx.fillStyle = C.cream;
-  ctx.beginPath(); ctx.arc(x+3, y+3, 2, 0, Math.PI*2); ctx.fill();
-  // Dollar sign — vertical bar
-  ctx.fillStyle = C.darkGray;
-  ctx.fillRect(x+4, y+1, 2, 8);
-  // S curves (top arc, bottom arc)
-  ctx.fillRect(x+3, y+2, 4, 1);
-  ctx.fillRect(x+3, y+4, 4, 1);
-  ctx.fillRect(x+3, y+6, 4, 1);
-  ctx.fillRect(x+2, y+3, 2, 1);
-  ctx.fillRect(x+6, y+5, 2, 1);
+  // Bill body
+  ctx.fillStyle = '#2d7a2d'; ctx.fillRect(x,   y,   18, 10);
+  // Inner lighter rectangle
+  ctx.fillStyle = '#3da83d'; ctx.fillRect(x+2, y+2, 14,  6);
+  // Dark border
+  ctx.strokeStyle = '#1a4d1a'; ctx.lineWidth = 1;
+  ctx.strokeRect(x+0.5, y+0.5, 17, 9);
+  // White oval border around center
+  ctx.strokeStyle = '#c8f0c8'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.ellipse(x+9, y+5, 4, 3, 0, 0, Math.PI*2); ctx.stroke();
+  // $ — vertical bar
+  ctx.fillStyle = C.white;
+  ctx.fillRect(x+8, y+1, 2, 8);
+  // $ — top and bottom arcs (S shape)
+  ctx.fillRect(x+6, y+2, 5, 1);
+  ctx.fillRect(x+6, y+4, 5, 1);
+  ctx.fillRect(x+6, y+6, 5, 1);
+  ctx.fillStyle = '#3da83d';  // erase corners to make S curves
+  ctx.fillRect(x+10, y+2, 1, 1);
+  ctx.fillRect(x+6,  y+6, 1, 1);
+  // Corner serifs (cream dots, like ornate bill corners)
+  ctx.fillStyle = '#c8f0c8';
+  ctx.fillRect(x+1,  y+1,  2, 2);
+  ctx.fillRect(x+15, y+1,  2, 2);
+  ctx.fillRect(x+1,  y+7,  2, 2);
+  ctx.fillRect(x+15, y+7,  2, 2);
 }
 
 // ── DRAW GAS STATION ─────────────────────────────────────────────────────────
@@ -882,7 +893,6 @@ const Level1Scene = {
 
   // Collectibles
   dollars: [],
-  nextDollarSpawnTime: 0,
 
   // Spawn (time-based)
   gameStarted: false,
@@ -924,7 +934,6 @@ const Level1Scene = {
     this.lifeBonus = 0;
     this.finalScore = 0;
     this.dollars = [];
-    this.nextDollarSpawnTime = 1.0;
     this.gameStarted = false;
     this.gameElapsed = 0;
     this.nextCarSpawnTime = 2.0; // first car 2 s after player starts moving
@@ -936,7 +945,8 @@ const Level1Scene = {
     for (let i=0; i<8; i++) {
       this.cloudX.push({ x: 100 + i*550, y: 20 + Math.random()*40, w: 40+Math.random()*30, speed: 0.2+Math.random()*0.1 });
     }
-    // No pre-spawned cars — time-based spawner handles everything
+    // Place 20 dollars spread across the level
+    this.placeDollars();
   },
 
   spawnGroundCar(wx) {
@@ -958,15 +968,18 @@ const Level1Scene = {
     this.flyingCars.push({ wx, flyY, type, speed, frame: 0 });
   },
 
-  spawnDollarCluster(wx) {
-    const count = 1 + Math.floor(Math.random() * 3); // 1-3 coins
-    for (let i = 0; i < count; i++) {
+  placeDollars() {
+    const startX = 400;
+    const endX = this.gasStationX - 400;
+    const spacing = (endX - startX) / 19;
+    for (let i = 0; i < 20; i++) {
+      const wx = startX + i * spacing + (Math.random() - 0.5) * spacing * 0.6;
       const r = Math.random();
-      // 60% ground level, 30% mid-jump, 10% peak-jump height
-      const wy = r < 0.6 ? this.groundY - 16
-               : r < 0.9 ? this.groundY - 44
-               :            this.groundY - 66;
-      this.dollars.push({ wx: wx + i * 22, wy, collected: false });
+      // 60% ground level (easy), 30% mid-jump (medium), 10% peak-jump (hard but reachable)
+      const wy = r < 0.6 ? this.groundY - 12   // 208, easy grab
+               : r < 0.9 ? this.groundY - 35   // 185, requires a small jump
+               :            this.groundY - 55;  // 165, only reachable at peak jump
+      this.dollars.push({ wx, wy, collected: false });
     }
   },
 
@@ -1055,17 +1068,10 @@ const Level1Scene = {
     this.scrollX += (targetScroll - this.scrollX) * Math.min(1, dt*8);
     this.scrollX = Math.max(0, Math.min(this.worldWidth - BASE_W, this.scrollX));
 
-    // ── SPAWN DOLLARS (every 0.8-2 s after player moves) ──
-    if (this.gameStarted && this.gameElapsed >= this.nextDollarSpawnTime) {
-      const dsx = Math.floor(this.scrollX + BASE_W + 60);
-      if (dsx < this.gasStationX - 100) this.spawnDollarCluster(dsx);
-      this.nextDollarSpawnTime = this.gameElapsed + 0.8 + Math.random() * 1.2;
-    }
-
     // ── COLLECT DOLLARS ──
     for (const d of this.dollars) {
       if (d.collected) continue;
-      if (this.checkCollision(this.px - 6, this.py, 12, 20, d.wx - 5, d.wy - 5, 10, 10)) {
+      if (this.checkCollision(this.px - 6, this.py, 12, 20, d.wx, d.wy, 18, 10)) {
         d.collected = true;
         this.score += 100;
         this.dollarScore += 100;
@@ -1083,7 +1089,7 @@ const Level1Scene = {
           this.spawnGroundCar(spawnX);
         }
       }
-      this.nextCarSpawnTime = this.gameElapsed + 1 + Math.random() * 2; // next car in 1-3 s
+      this.nextCarSpawnTime = this.gameElapsed + 1 + Math.random(); // next car in 1-2 s
     }
 
     // ── UPDATE GROUND CARS ──
@@ -1241,7 +1247,7 @@ const Level1Scene = {
     for (const d of this.dollars) {
       if (d.collected) continue;
       const dx = d.wx - sx;
-      if (dx > -12 && dx < BASE_W + 12) drawDollar(dx, d.wy, gt);
+      if (dx > -20 && dx < BASE_W + 20) drawDollarBill(dx, d.wy, gt);
     }
 
     // ── HUD ──
