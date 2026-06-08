@@ -878,6 +878,8 @@ const Level1Scene = {
   // Goal
   gasStationX: 5600,
   reachedStation: false,
+  runningBack: false,
+  runBackScrollX: 0,
 
   // Timing
   startTime: 0,
@@ -925,6 +927,8 @@ const Level1Scene = {
     this.groundCars = [];
     this.flyingCars = [];
     this.reachedStation = false;
+    this.runningBack = false;
+    this.runBackScrollX = 0;
     this.startTime = 0;  // set when player first moves
     this.elapsed = 0;
     this.finished = false;
@@ -997,6 +1001,26 @@ const Level1Scene = {
         } else {
           setScene(LevelSelectScene);
         }
+      }
+      return;
+    }
+
+    // ── RUNNING BACK TO FAMILY CAR WITH GAS CAN ──
+    if (this.runningBack) {
+      // Connor runs left at full speed; camera is frozen at runBackScrollX
+      this.pvx = -90;
+      this.facingRight = false;
+      this.px += this.pvx * dt;
+
+      // Keep walk animation ticking
+      this.walkTimer += dt;
+      if (this.walkTimer > 0.12) { this.walkTimer = 0; this.walkFrame = (this.walkFrame + 1) % 4; }
+
+      // Once Connor exits the left edge of the frozen screen, show level complete
+      if (this.px < this.runBackScrollX - 20) {
+        this.runningBack = false;
+        this.finished = true;
+        this.finishTimer = 0;
       }
       return;
     }
@@ -1136,8 +1160,13 @@ const Level1Scene = {
       this.lifeBonus = this.health === 3 ? 500 : this.health === 2 ? 200 : 0;
       this.score += this.lifeBonus;
       this.finalScore = this.score;
-      this.finished = true;
-      this.finishTimer = 0;
+      // Clear all obstacles so Connor runs back safely
+      this.groundCars = [];
+      this.flyingCars = [];
+      this.invincible = 999;
+      // Lock the camera and send Connor running back to the family car
+      this.runBackScrollX = this.scrollX;
+      this.runningBack = true;
     }
 
     // Clouds
