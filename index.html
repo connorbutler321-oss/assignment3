@@ -886,6 +886,7 @@ const Level1Scene = {
   elapsed: 0,
   finished: false,
   finishTimer: 0,
+  showBonusPrompt: false,
 
   // Scoring
   score: 0,
@@ -933,6 +934,7 @@ const Level1Scene = {
     this.elapsed = 0;
     this.finished = false;
     this.finishTimer = 0;
+    this.showBonusPrompt = false;
     this.score = 0;
     this.dollarScore = 0;
     this.lifeBonus = 0;
@@ -994,12 +996,22 @@ const Level1Scene = {
   update(dt) {
     if (this.finished) {
       this.finishTimer += dt;
-      if (this.finishTimer > 2.5) {
-        if (isHighScore(this.finalScore)) {
-          InitialsScene.setScore(this.finalScore);
-          setScene(InitialsScene);
-        } else {
-          setScene(LevelSelectScene);
+      if (!this.showBonusPrompt && this.finishTimer > 2.5) {
+        this.showBonusPrompt = true;
+      }
+      if (this.showBonusPrompt) {
+        if (consumeKey('Enter') || consumeKey('Space')) {
+          BonusIntroScene.fromScore = this.finalScore;
+          BonusIntroScene.fromHealth = this.health;
+          setScene(BonusIntroScene);
+        }
+        if (consumeKey('Escape')) {
+          if (isHighScore(this.finalScore)) {
+            InitialsScene.setScore(this.finalScore);
+            setScene(InitialsScene);
+          } else {
+            setScene(LevelSelectScene);
+          }
         }
       }
       return;
@@ -1322,6 +1334,13 @@ const Level1Scene = {
       drawText('LIFE BONUS:  ' + bonusLabel, BASE_W/2, 114, bonusColor, 1, 'center');
       rect(BASE_W/2 - 90, 126, 180, 1, C.gray);
       drawText('TOTAL:  ' + formatScore(this.finalScore) + ' PTS', BASE_W/2, 132, C.yellow, 1, 'center');
+      if (this.showBonusPrompt) {
+        rect(BASE_W/2 - 110, 148, 220, 1, C.gray);
+        if (Math.floor(performance.now() / 500) % 2 === 0) {
+          drawText('PRESS ENTER - BONUS LEVEL', BASE_W/2, 156, C.yellow, 1, 'center');
+        }
+        drawText('PRESS ESC - SKIP TO SCORES', BASE_W/2, 170, C.gray, 1, 'center');
+      }
     }
   }
 };
@@ -1367,6 +1386,441 @@ const GameOverScene = {
       drawHeart(BASE_W/2 - 21 + i*14, 150, false);
     }
   }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCENE: BONUS INTRO  (forgot the phone!)
+// ═══════════════════════════════════════════════════════════════════════════════
+const BonusIntroScene = {
+  fromScore: 0,
+  fromHealth: 1,
+  pages: [
+    {
+      lines: [
+        'CONNOR MADE IT BACK',
+        'TO THE FAMILY CAR.',
+        '',
+        '"GREAT JOB, BUDDY!"',
+        '',
+        'THE FAMILY WAS RELIEVED.',
+      ],
+      bg: '#1a2e1a', accent: C.green,
+    },
+    {
+      lines: [
+        'CONNOR PATTED HIS POCKET.',
+        '',
+        '...WAIT.',
+        '',
+        'HIS PHONE.',
+        '',
+        'HE LEFT IT AT THE',
+        'GAS STATION!',
+      ],
+      bg: '#2e2a1a', accent: C.yellow,
+    },
+    {
+      lines: [
+        '"I HAVE TO GO BACK!"',
+        '',
+        '"CONNOR, THE TRAFFIC IS',
+        'GETTING CRAZY OUT THERE!"',
+        '',
+        '"I\'LL BE QUICK, I PROMISE!"',
+      ],
+      bg: '#1a1a2e', accent: C.orange,
+    },
+  ],
+  page: 0,
+  t: 0,
+  init() { this.page = 0; this.t = 0; },
+  update(dt) {
+    this.t += dt;
+    if (consumeKey('Enter') || consumeKey('Space')) {
+      this.page++;
+      this.t = 0;
+      if (this.page >= this.pages.length) {
+        BonusLevelScene.startScore  = this.fromScore;
+        BonusLevelScene.startHealth = this.fromHealth;
+        setScene(BonusLevelScene);
+      }
+    }
+  },
+  draw() {
+    const p = this.pages[this.page];
+    if (!p) return;
+    rect(0, 0, BASE_W, BASE_H, p.bg);
+    border(4, 4, BASE_W-8, BASE_H-8, p.accent);
+    border(6, 6, BASE_W-12, BASE_H-12, 'rgba(255,255,255,0.1)');
+    for (let i=0; i<this.pages.length; i++) {
+      drawStar(BASE_W/2 - (this.pages.length-1)*8 + i*16, 18, 4, i===this.page ? p.accent : C.darkGray);
+    }
+    const lineH = 18;
+    const startY = 38;
+    for (let i=0; i<p.lines.length; i++) {
+      const alpha = Math.min(1, (this.t - i*0.3) * 3);
+      if (alpha <= 0) continue;
+      ctx.globalAlpha = alpha;
+      drawText(p.lines[i], BASE_W/2, startY + i*lineH, p.accent, 1, 'center');
+      ctx.globalAlpha = 1;
+    }
+    if (this.t > 0.5 && Math.floor(this.t*2)%2) {
+      const isLast = this.page === this.pages.length - 1;
+      drawText(isLast ? 'PRESS ENTER TO START BONUS' : 'PRESS ENTER TO CONTINUE', BASE_W/2, BASE_H-20, C.white, 1, 'center');
+    }
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCENE: BONUS LEVEL  (infinite highway, escalating speed, ends on death)
+// ═══════════════════════════════════════════════════════════════════════════════
+const BonusLevelScene = {
+  startScore: 0,
+  startHealth: 1,
+
+  // Player
+  px: 0, py: 0, pvx: 0, pvy: 0,
+  onGround: false, facingRight: true,
+  walkFrame: 0, walkTimer: 0,
+  health: 1, invincible: 0, hitFlash: 0,
+
+  // World
+  scrollX: 0, groundY: 0,
+  groundCars: [], flyingCars: [],
+
+  // Scoring / collectibles
+  score: 0, dollarScore: 0,
+  dollars: [], nextDollarSpawnTime: 0,
+
+  // Timing
+  gameStarted: false, gameElapsed: 0, nextCarSpawnTime: 0,
+
+  checkCollision(wx, wy, ww, wh, cx2, cy2, cw2, ch2) {
+    return wx < cx2+cw2 && wx+ww > cx2 && wy < cy2+ch2 && wy+wh > cy2;
+  },
+
+  init() {
+    this.groundY = BASE_H - 50;
+    this.px = 100;
+    this.py = this.groundY - 20;
+    this.pvx = 0; this.pvy = 0;
+    this.onGround = true; this.facingRight = true;
+    this.health = this.startHealth;
+    this.invincible = 0; this.hitFlash = 0;
+    this.walkFrame = 0; this.walkTimer = 0;
+    this.scrollX = 0;
+    this.groundCars = []; this.flyingCars = [];
+    this.dollars = [];
+    this.score = this.startScore;
+    this.dollarScore = 0;
+    this.gameStarted = false;
+    this.gameElapsed = 0;
+    this.nextCarSpawnTime = 2.0;
+    this.nextDollarSpawnTime = 1.5;
+  },
+
+  spawnGroundCar(wx, mult) {
+    const type = Math.floor(Math.random()*5);
+    const w = [40,52,44,50,38][type];
+    const speed = (1.5 + Math.random()*1.5) * mult;
+    this.groundCars.push({ wx, w, type, speed, frame: 0 });
+  },
+
+  spawnFlyingCar(wx, mult) {
+    const type = Math.floor(Math.random()*4);
+    const flyY = this.groundY - 55 + Math.floor(Math.random()*6);
+    const speed = (1.8 + Math.random()*1.5) * mult;
+    this.flyingCars.push({ wx, flyY, type, speed, frame: 0 });
+  },
+
+  gameOver() {
+    BonusEndScene.finalScore  = this.score;
+    BonusEndScene.dollarScore = this.dollarScore;
+    setScene(BonusEndScene);
+  },
+
+  update(dt) {
+    if (!this.gameStarted) {
+      const any = keys['ArrowRight']||keys['KeyD']||keys['ArrowLeft']||keys['KeyA']||
+                  keys['Space']||keys['ArrowUp']||keys['KeyW'];
+      if (any) this.gameStarted = true;
+    }
+    if (this.gameStarted) this.gameElapsed += dt;
+
+    // Escalating difficulty
+    const speedMult    = 1 + this.gameElapsed * 0.04;          // +4%/s; ×2 at 25 s
+    const spawnInterval = Math.max(0.25, 1.5 - this.gameElapsed * 0.025); // 1.5 → 0.25 s over 50 s
+
+    // ── PLAYER MOVEMENT ──
+    const SPEED = 90, JUMP_V = -200, GRAVITY = 500;
+    this.pvx = 0;
+    if (keys['ArrowRight']||keys['KeyD']) { this.pvx =  SPEED;       this.facingRight = true;  }
+    if (keys['ArrowLeft'] ||keys['KeyA']) { this.pvx = -SPEED * 0.6; this.facingRight = false; }
+    if ((keys['Space']||keys['ArrowUp']||keys['KeyW']) && this.onGround) {
+      this.pvy = JUMP_V; this.onGround = false;
+    }
+    this.pvy += GRAVITY * dt;
+    this.px  += this.pvx * dt;
+    this.py  += this.pvy * dt;
+    if (this.py + 20 >= this.groundY) { this.py = this.groundY - 20; this.pvy = 0; this.onGround = true; }
+    if (this.px - this.scrollX < 20) this.px = this.scrollX + 20;
+
+    if (this.pvx !== 0 && this.onGround) {
+      this.walkTimer += dt;
+      if (this.walkTimer > 0.12) { this.walkTimer = 0; this.walkFrame = (this.walkFrame+1)%4; }
+    } else if (this.onGround) { this.walkFrame = 0; }
+
+    const targetScroll = this.px - 80;
+    this.scrollX += (targetScroll - this.scrollX) * Math.min(1, dt*8);
+    if (this.scrollX < 0) this.scrollX = 0;
+
+    if (this.invincible > 0) this.invincible -= dt;
+    if (this.hitFlash  > 0) this.hitFlash  -= dt;
+
+    // ── SPAWN DOLLARS ──
+    if (this.gameStarted && this.gameElapsed >= this.nextDollarSpawnTime) {
+      const r = Math.random();
+      const wy = r < 0.6 ? this.groundY - 12 : r < 0.9 ? this.groundY - 35 : this.groundY - 55;
+      this.dollars.push({ wx: Math.floor(this.scrollX + BASE_W + 60), wy, collected: false });
+      this.nextDollarSpawnTime = this.gameElapsed + 1.5 + Math.random() * 1.5;
+    }
+
+    // ── COLLECT DOLLARS ──
+    for (const d of this.dollars) {
+      if (d.collected) continue;
+      if (this.checkCollision(this.px-6, this.py, 12, 20, d.wx, d.wy, 18, 10)) {
+        d.collected = true; this.score += 100; this.dollarScore += 100;
+      }
+    }
+    this.dollars = this.dollars.filter(d => !d.collected && d.wx > this.scrollX - 60);
+
+    // ── SPAWN CARS ──
+    if (this.gameStarted && this.gameElapsed >= this.nextCarSpawnTime) {
+      const sx2 = Math.floor(this.scrollX + BASE_W + 80);
+      if (Math.random() < 0.3) this.spawnFlyingCar(sx2, speedMult);
+      else                      this.spawnGroundCar(sx2, speedMult);
+      this.nextCarSpawnTime = this.gameElapsed + spawnInterval * (0.75 + Math.random()*0.5);
+    }
+
+    // ── UPDATE GROUND CARS ──
+    const PW = 12, PH = 20;
+    for (const c of this.groundCars) {
+      c.wx -= c.speed; c.frame++;
+      if (this.invincible <= 0) {
+        if (this.checkCollision(this.px-PW/2, this.py, PW, PH, c.wx-c.w/2, this.groundY-24, c.w, 24)) {
+          this.health--; this.invincible = 2.5; this.hitFlash = 0.3;
+          if (this.health <= 0) { this.gameOver(); return; }
+        }
+      }
+    }
+    this.groundCars = this.groundCars.filter(c => c.wx > this.scrollX - 200);
+
+    // ── UPDATE FLYING CARS ──
+    for (const fc of this.flyingCars) {
+      fc.wx -= fc.speed; fc.frame++;
+      if (this.invincible <= 0) {
+        if (this.checkCollision(this.px-PW/2, this.py, PW, PH, fc.wx-18, fc.flyY, 36, 16)) {
+          this.health--; this.invincible = 2.5; this.hitFlash = 0.3;
+          if (this.health <= 0) { this.gameOver(); return; }
+        }
+      }
+    }
+    this.flyingCars = this.flyingCars.filter(c => c.wx > this.scrollX - 200);
+  },
+
+  draw() {
+    const sx = this.scrollX;
+    const gY = this.groundY;
+
+    // Sky — slightly redder to signal danger
+    const grad = ctx.createLinearGradient(0, 0, 0, gY - 30);
+    grad.addColorStop(0, '#3a2a4a');
+    grad.addColorStop(1, '#b06040');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, BASE_W, gY - 30);
+
+    // Ground / road
+    rect(0, gY - 30, BASE_W, 30, C.grass);
+    rect(0, gY - 4,  BASE_W,  4, C.shoulder);
+    rect(0, gY,      BASE_W, BASE_H - gY, C.road);
+    rect(0, BASE_H - 12, BASE_W, 12, C.shoulder);
+    const dashOff = sx % 40;
+    for (let dx = -dashOff; dx < BASE_W; dx += 40) rect(dx, gY + 10, 20, 4, C.roadLine);
+
+    // Dollars
+    const gt = performance.now() / 1000;
+    for (const d of this.dollars) {
+      if (d.collected) continue;
+      const dx = d.wx - sx;
+      if (dx > -20 && dx < BASE_W + 20) drawDollarBill(dx, d.wy, gt);
+    }
+
+    // Ground cars
+    for (const c of this.groundCars) {
+      const cx = c.wx - sx - c.w/2;
+      if (cx > -60 && cx < BASE_W+20) drawCar(cx, gY - 24, c.type, c.frame);
+    }
+
+    // Flying cars
+    for (const fc of this.flyingCars) {
+      const fx = fc.wx - sx - 18;
+      if (fx > -50 && fx < BASE_W+20) drawFlyingCar(fx, fc.flyY, fc.type, fc.frame);
+    }
+
+    // Connor (blinks when invincible)
+    const psx = Math.floor(this.px - sx - 8);
+    const psy = Math.floor(this.py);
+    const show = this.invincible <= 0 || Math.floor(this.invincible * 10) % 2 === 0;
+    if (show) drawConnor(psx, psy, this.walkFrame, this.facingRight, false);
+
+    // HUD
+    for (let i = 0; i < 3; i++) drawHeart(8 + i*14, 6, i < this.health);
+    if (this.gameStarted) {
+      drawText('$' + formatScore(this.score), BASE_W/2, 6, C.yellow, 1, 'center');
+      // Speed gauge — fills with ! as difficulty climbs
+      const lvl = Math.min(5, Math.floor(this.gameElapsed / 10) + 1);
+      drawText('SPD ' + '!'.repeat(lvl), BASE_W - 4, 6, lvl >= 4 ? C.red : C.orange, 1, 'right');
+    } else {
+      if (Math.floor(performance.now() / 500) % 2 === 0)
+        drawText('PRESS ANY KEY TO START', BASE_W/2, BASE_H/2 - 20, C.yellow, 1, 'center');
+      drawText('ARROW KEYS TO MOVE  SPACE TO JUMP', BASE_W/2, BASE_H/2 - 8, C.white, 1, 'center');
+    }
+
+    if (this.hitFlash > 0) {
+      ctx.fillStyle = `rgba(255,0,0,${this.hitFlash/0.3 * 0.3})`;
+      ctx.fillRect(0, 0, BASE_W, BASE_H);
+    }
+    if (this.invincible > 0 && this.invincible < 2.5) {
+      if (Math.floor(this.invincible*4)%2)
+        drawText('!', this.px - sx, this.py - 8, C.red, 2, 'center');
+    }
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCENE: BONUS END
+// ═══════════════════════════════════════════════════════════════════════════════
+const BonusEndScene = {
+  finalScore: 0,
+  dollarScore: 0,
+  t: 0,
+  init() { this.t = 0; },
+  update(dt) {
+    this.t += dt;
+    if (this.t > 1.5 && (consumeKey('Enter') || consumeKey('Space')))
+      setScene(BonusDreamScene);
+  },
+  draw() {
+    rect(0, 0, BASE_W, BASE_H, '#1a1a2e');
+    border(4, 4, BASE_W-8, BASE_H-8, C.orange);
+
+    drawText('BONUS OVER!', BASE_W/2, 50, C.orange, 2, 'center');
+    drawText('CONNOR RAN OUT OF LIVES...', BASE_W/2, 76, C.white, 1, 'center');
+
+    rect(BASE_W/2 - 110, 90, 220, 1, C.gray);
+    drawText('BONUS DOLLARS:  +' + formatScore(this.dollarScore) + ' PTS', BASE_W/2, 98,  C.white,  1, 'center');
+    rect(BASE_W/2 - 110, 110, 220, 1, C.gray);
+    drawText('TOTAL SCORE:  '   + formatScore(this.finalScore)  + ' PTS', BASE_W/2, 118, C.yellow, 1, 'center');
+
+    if (this.t > 1.5 && Math.floor(this.t*2)%2)
+      drawText('PRESS ENTER TO CONTINUE', BASE_W/2, BASE_H - 25, C.white, 1, 'center');
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCENE: BONUS DREAM CUTSCENE  ("it was all a dream")
+// ═══════════════════════════════════════════════════════════════════════════════
+const BonusDreamScene = {
+  pages: [
+    {
+      lines: [
+        'MEANWHILE, BACK IN',
+        'THE FAMILY CAR...',
+        '',
+        '"CONNOR! WAKE UP!"',
+        '',
+        '"WE\'RE ALMOST HOME."',
+      ],
+      bg: '#0a0a1a', accent: C.ltBlue,
+    },
+    {
+      lines: [
+        'CONNOR RUBBED HIS EYES.',
+        '',
+        'IT WAS ALL...',
+        '',
+        'JUST A DREAM.',
+        '',
+        'HIS PHONE WAS IN HIS',
+        'POCKET THE WHOLE TIME.',
+      ],
+      bg: '#111111', accent: C.gray,
+    },
+    {
+      lines: [
+        'THE BUTLER FAMILY',
+        'MADE IT HOME SAFE.',
+        '',
+        'MAYBE NEXT SUMMER',
+        'THEY\'LL TRY THE BEACH',
+        'AGAIN...',
+        '',
+        'THE END.',
+      ],
+      bg: '#0a1a0a', accent: C.green,
+    },
+  ],
+  page: 0,
+  t: 0,
+  init() { this.page = 0; this.t = 0; },
+  update(dt) {
+    this.t += dt;
+    if (consumeKey('Enter') || consumeKey('Space')) {
+      this.page++;
+      this.t = 0;
+      if (this.page >= this.pages.length) {
+        const fs = BonusEndScene.finalScore;
+        if (isHighScore(fs)) { InitialsScene.setScore(fs); setScene(InitialsScene); }
+        else                  { setScene(HighScoreScene); }
+      }
+    }
+  },
+  draw() {
+    const p = this.pages[this.page];
+    if (!p) return;
+    rect(0, 0, BASE_W, BASE_H, p.bg);
+    border(4, 4, BASE_W-8, BASE_H-8, p.accent);
+    border(6, 6, BASE_W-12, BASE_H-12, 'rgba(255,255,255,0.1)');
+
+    for (let i=0; i<this.pages.length; i++) {
+      drawStar(BASE_W/2 - (this.pages.length-1)*8 + i*16, 18, 4, i===this.page ? p.accent : C.darkGray);
+    }
+
+    // Page 0: draw Connor asleep in the car
+    if (this.page === 0) {
+      const cx = BASE_W/2, cy = BASE_H - 68;
+      rect(cx - 55, cy,     110, 38, '#1a1a1a');   // car silhouette
+      rect(cx - 38, cy - 18, 76, 20, '#1a2535');   // window
+      ctx.fillStyle = C.skin;  ctx.fillRect(cx - 8, cy - 13, 10, 10); // Connor's head, slumped
+      ctx.fillStyle = C.blue;  ctx.fillRect(cx - 12, cy - 3, 16, 9);  // body
+      if (Math.floor(this.t * 2) % 2 === 0)
+        drawText('ZZZ', cx + 6, cy - 20, C.white, 1, 'left');
+    }
+
+    const lineH = 18, startY = 35;
+    for (let i=0; i<p.lines.length; i++) {
+      const alpha = Math.min(1, (this.t - i*0.3) * 3);
+      if (alpha <= 0) continue;
+      ctx.globalAlpha = alpha;
+      drawText(p.lines[i], BASE_W/2, startY + i*lineH, p.accent, 1, 'center');
+      ctx.globalAlpha = 1;
+    }
+
+    if (this.t > 0.5 && Math.floor(this.t*2)%2) {
+      const isLast = this.page === this.pages.length - 1;
+      drawText(isLast ? 'PRESS ENTER TO SEE SCORES' : 'PRESS ENTER TO CONTINUE', BASE_W/2, BASE_H-20, C.white, 1, 'center');
+    }
+  },
 };
 
 // ── SCORE FORMATTER ───────────────────────────────────────────────────────────
