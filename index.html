@@ -1,0 +1,1371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>American Weekend Vacation</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+  canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+const BASE_W = 480;
+const BASE_H = 270;
+canvas.width = BASE_W;
+canvas.height = BASE_H;
+
+// Scale to fit window
+function resize() {
+  const scale = Math.min(window.innerWidth / BASE_W, window.innerHeight / BASE_H);
+  canvas.style.width = (BASE_W * scale) + 'px';
+  canvas.style.height = (BASE_H * scale) + 'px';
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ── PALETTE ──────────────────────────────────────────────────────────────────
+const C = {
+  sky:     '#87CEEB',
+  skyDark: '#4a90d9',
+  road:    '#555566',
+  roadLine:'#FFFF00',
+  shoulder:'#888877',
+  grass:   '#5a8a3c',
+  white:   '#FFFFFF',
+  black:   '#000000',
+  red:     '#DD2222',
+  blue:    '#2244CC',
+  yellow:  '#FFDD00',
+  orange:  '#FF8800',
+  skin:    '#F5C5A3',
+  brown:   '#8B5E3C',
+  gray:    '#AAAAAA',
+  darkGray:'#444444',
+  green:   '#33AA44',
+  purple:  '#8833CC',
+  pink:    '#FF88AA',
+  teal:    '#22AAAA',
+  tan:     '#D2B48C',
+  dkRed:   '#991111',
+  ltBlue:  '#AADDFF',
+  cream:   '#FFF8DC',
+};
+
+// ── INPUT ─────────────────────────────────────────────────────────────────────
+const keys = {};
+const justPressed = {};
+window.addEventListener('keydown', e => {
+  if (!keys[e.code]) justPressed[e.code] = true;
+  keys[e.code] = true;
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+function consumeKey(code) {
+  if (justPressed[code]) { delete justPressed[code]; return true; }
+  return false;
+}
+
+// ── HIGHSCORES ────────────────────────────────────────────────────────────────
+const HS_KEY = 'awv_highscores_v2';
+function loadScores() {
+  try { return JSON.parse(localStorage.getItem(HS_KEY)) || []; } catch { return []; }
+}
+function saveScores(arr) { localStorage.setItem(HS_KEY, JSON.stringify(arr)); }
+function addScore(initials, points) {
+  const scores = loadScores();
+  scores.push({ initials: initials.toUpperCase().slice(0,3), score: points });
+  scores.sort((a,b) => b.score - a.score); // highest first
+  scores.splice(10);
+  saveScores(scores);
+  return scores;
+}
+function isHighScore(points) {
+  const scores = loadScores();
+  if (scores.length < 10) return true;
+  return points > scores[scores.length - 1].score;
+}
+
+// ── SCENE MANAGER ─────────────────────────────────────────────────────────────
+let scene = null;
+function setScene(s) { scene = s; scene.init(); }
+
+// ── PIXEL FONT (tiny 5x7 bitmapped) ──────────────────────────────────────────
+const FONT = {
+  A:'01110 10001 10001 11111 10001 10001 10001',
+  B:'11110 10001 10001 11110 10001 10001 11110',
+  C:'01110 10001 10000 10000 10000 10001 01110',
+  D:'11110 10001 10001 10001 10001 10001 11110',
+  E:'11111 10000 10000 11110 10000 10000 11111',
+  F:'11111 10000 10000 11110 10000 10000 10000',
+  G:'01110 10001 10000 10111 10001 10001 01111',
+  H:'10001 10001 10001 11111 10001 10001 10001',
+  I:'01110 00100 00100 00100 00100 00100 01110',
+  J:'00111 00010 00010 00010 00010 10010 01100',
+  K:'10001 10010 10100 11000 10100 10010 10001',
+  L:'10000 10000 10000 10000 10000 10000 11111',
+  M:'10001 11011 10101 10001 10001 10001 10001',
+  N:'10001 11001 10101 10011 10001 10001 10001',
+  O:'01110 10001 10001 10001 10001 10001 01110',
+  P:'11110 10001 10001 11110 10000 10000 10000',
+  Q:'01110 10001 10001 10001 10101 10010 01101',
+  R:'11110 10001 10001 11110 10100 10010 10001',
+  S:'01111 10000 10000 01110 00001 00001 11110',
+  T:'11111 00100 00100 00100 00100 00100 00100',
+  U:'10001 10001 10001 10001 10001 10001 01110',
+  V:'10001 10001 10001 10001 10001 01010 00100',
+  W:'10001 10001 10001 10101 10101 11011 10001',
+  X:'10001 10001 01010 00100 01010 10001 10001',
+  Y:'10001 10001 01010 00100 00100 00100 00100',
+  Z:'11111 00001 00010 00100 01000 10000 11111',
+  '0':'01110 10011 10011 10101 11001 11001 01110',
+  '1':'00100 01100 00100 00100 00100 00100 01110',
+  '2':'01110 10001 00001 00010 00100 01000 11111',
+  '3':'11110 00001 00001 01110 00001 00001 11110',
+  '4':'00010 00110 01010 10010 11111 00010 00010',
+  '5':'11111 10000 10000 11110 00001 00001 11110',
+  '6':'00110 01000 10000 11110 10001 10001 01110',
+  '7':'11111 00001 00010 00100 01000 01000 01000',
+  '8':'01110 10001 10001 01110 10001 10001 01110',
+  '9':'01110 10001 10001 01111 00001 00010 01100',
+  ' ':'00000 00000 00000 00000 00000 00000 00000',
+  '.':'00000 00000 00000 00000 00000 00100 00100',
+  ':':'00000 00100 00000 00000 00000 00100 00000',
+  '!':'00100 00100 00100 00100 00000 00000 00100',
+  '\'':'00100 00100 00000 00000 00000 00000 00000',
+  '-':'00000 00000 00000 11111 00000 00000 00000',
+  '/':'00001 00001 00010 00100 01000 10000 10000',
+  '>':'10000 01000 00100 00010 00100 01000 10000',
+};
+
+function drawText(text, x, y, color, scale=1, align='left') {
+  const PW = 5, PH = 7, GAP = 1;
+  const charW = (PW + GAP) * scale;
+  const totalW = text.length * charW - GAP * scale;
+  let ox = x;
+  if (align === 'center') ox = x - totalW / 2;
+  if (align === 'right')  ox = x - totalW;
+  ctx.fillStyle = color;
+  for (let ci = 0; ci < text.length; ci++) {
+    const ch = text[ci].toUpperCase();
+    const data = FONT[ch] || FONT[' '];
+    const rows = data.split(' ');
+    for (let row = 0; row < rows.length; row++) {
+      for (let col = 0; col < rows[row].length; col++) {
+        if (rows[row][col] === '1') {
+          ctx.fillRect(
+            Math.floor(ox + ci * charW + col * scale),
+            Math.floor(y + row * scale),
+            scale, scale
+          );
+        }
+      }
+    }
+  }
+}
+
+function textWidth(text, scale=1) {
+  return text.length * (5 + 1) * scale - scale;
+}
+
+// ── SPRITE DRAWING HELPERS ────────────────────────────────────────────────────
+function pixel(x, y, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(Math.floor(x), Math.floor(y), 1, 1);
+}
+function rect(x, y, w, h, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(Math.floor(x), Math.floor(y), w, h);
+}
+function border(x, y, w, h, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(Math.floor(x)+0.5, Math.floor(y)+0.5, w-1, h-1);
+}
+
+// ── DRAW CONNOR (16x20 pixels) ────────────────────────────────────────────────
+function drawConnor(x, y, frame, facingRight, gasCanInHand) {
+  x = Math.floor(x);
+  y = Math.floor(y);
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.fillRect(x+1, y+19, 14, 2);
+
+  // Body (shirt - blue)
+  rect(x+4, y+8, 8, 7, C.blue);
+  // Pants (dark)
+  rect(x+4, y+15, 4, 5, C.darkGray);
+  rect(x+8, y+15, 4, 5, C.darkGray);
+  // Shoes
+  rect(x+3, y+18, 5, 2, C.brown);
+  rect(x+8, y+18, 5, 2, C.brown);
+
+  // Leg animation
+  const legOff = frame === 1 ? 1 : (frame === 3 ? -1 : 0);
+  rect(x+4, y+15, 4, 5, C.darkGray);
+  rect(x+8, y+15, 4, 5, C.darkGray);
+  if (frame === 1 || frame === 3) {
+    rect(x+3, y+15+legOff, 4, 5, C.darkGray);
+    rect(x+9, y+15-legOff, 4, 5, C.darkGray);
+    rect(x+2, y+18+legOff, 5, 2, C.brown);
+    rect(x+8, y+18-legOff, 5, 2, C.brown);
+  }
+
+  // Head
+  rect(x+4, y+1, 8, 7, C.skin);
+  // Hair (brown)
+  rect(x+4, y+1, 8, 2, C.brown);
+  // Eyes
+  rect(x+(facingRight?8:5), y+4, 2, 1, C.black);
+  // Mouth
+  rect(x+(facingRight?7:5), y+6, 3, 1, C.black);
+
+  // Arms
+  const armSwing = frame === 1 ? -1 : (frame === 3 ? 1 : 0);
+  rect(x+2, y+9+armSwing, 3, 2, C.skin);
+  if (gasCanInHand) {
+    // Gas can in right hand
+    if (facingRight) {
+      rect(x+11, y+9-armSwing, 3, 2, C.skin);
+      rect(x+12, y+7, 4, 6, C.red);
+      rect(x+14, y+6, 2, 2, C.darkGray);
+    } else {
+      rect(x+11, y+9-armSwing, 3, 2, C.skin);
+      rect(x+10, y+7, 4, 6, C.red);
+      rect(x+10, y+6, 2, 2, C.darkGray);
+    }
+  } else {
+    rect(x+11, y+9-armSwing, 3, 2, C.skin);
+  }
+}
+
+// ── DRAW GROUND CAR ───────────────────────────────────────────────────────────
+function drawCar(x, y, type, frame) {
+  x = Math.floor(x); y = Math.floor(y);
+  // type 0=sedan, 1=truck, 2=suv, 3=van, 4=sports
+  const configs = [
+    { w:40, h:18, body:C.red,    roof:C.dkRed,  wheel:C.darkGray },
+    { w:52, h:20, body:C.blue,   roof:C.ltBlue,  wheel:C.darkGray },
+    { w:44, h:22, body:C.green,  roof:C.green,   wheel:C.darkGray },
+    { w:50, h:22, body:C.tan,    roof:C.tan,     wheel:C.darkGray },
+    { w:38, h:16, body:C.yellow, roof:C.orange,  wheel:C.darkGray },
+  ];
+  const c = configs[type % configs.length];
+  const { w, h, body, roof, wheel } = c;
+
+  // Car shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.fillRect(x+2, y+h, w-2, 3);
+
+  // Body
+  rect(x, y+6, w, h-6, body);
+  // Roof
+  rect(x+8, y, w-16, 7, roof);
+  // Windows
+  rect(x+10, y+1, 8, 5, C.ltBlue);
+  rect(x+w-18, y+1, 8, 5, C.ltBlue);
+  // Headlights
+  rect(x+w-4, y+7, 3, 3, C.cream);
+  rect(x+1, y+7, 3, 3, C.cream);
+  // Bumpers
+  rect(x, y+h-6, 4, 4, C.gray);
+  rect(x+w-4, y+h-6, 4, 4, C.gray);
+  // Wheels (animate)
+  const wOff = (frame % 4);
+  rect(x+5, y+h-5, 8, 8, wheel);
+  rect(x+5+1, y+h-5+1, 6, 6, C.gray);
+  rect(x+w-13, y+h-5, 8, 8, wheel);
+  rect(x+w-13+1, y+h-5+1, 6, 6, C.gray);
+  // Hubcaps
+  rect(x+7+wOff%2, y+h-3, 2, 2, C.white);
+  rect(x+w-11+wOff%2, y+h-3, 2, 2, C.white);
+
+  // Black outline
+  border(x, y+6, w, h-6, C.black);
+}
+
+// ── DRAW FLYING CAR ───────────────────────────────────────────────────────────
+function drawFlyingCar(x, y, type, frame) {
+  x = Math.floor(x); y = Math.floor(y);
+  const colors = [C.purple, C.teal, C.orange, C.pink];
+  const body = colors[type % colors.length];
+  const w = 36, h = 16;
+
+  // Motion blur lines behind
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.fillRect(x+w, y+4, 20, 2);
+  ctx.fillRect(x+w, y+8, 14, 2);
+
+  // Hover glow
+  ctx.fillStyle = 'rgba(100,200,255,0.3)';
+  ctx.fillRect(x+4, y+h, w-8, 3);
+
+  rect(x, y+5, w, h-5, body);
+  rect(x+6, y, w-12, 6, body);
+  rect(x+8, y+1, 7, 4, C.ltBlue);
+  rect(x+w-15, y+1, 7, 4, C.ltBlue);
+  rect(x+w-3, y+6, 3, 3, C.cream);
+  // Jet flames
+  const flameH = 2 + frame % 3;
+  ctx.fillStyle = C.orange;
+  ctx.fillRect(x+8, y+h, 5, flameH);
+  ctx.fillRect(x+w-13, y+h, 5, flameH);
+  ctx.fillStyle = C.yellow;
+  ctx.fillRect(x+9, y+h, 3, flameH-1);
+
+  border(x, y+5, w, h-5, C.black);
+}
+
+// ── DRAW DOLLAR BILL (18×10 px) ──────────────────────────────────────────────
+function drawDollarBill(x, y, t) {
+  const bob = Math.sin(t * 4 + x * 0.05) * 2;
+  x = Math.floor(x); y = Math.floor(y + bob);
+  // Bill body
+  ctx.fillStyle = '#2d7a2d'; ctx.fillRect(x,   y,   18, 10);
+  // Inner lighter rectangle
+  ctx.fillStyle = '#3da83d'; ctx.fillRect(x+2, y+2, 14,  6);
+  // Dark border
+  ctx.strokeStyle = '#1a4d1a'; ctx.lineWidth = 1;
+  ctx.strokeRect(x+0.5, y+0.5, 17, 9);
+  // White oval border around center
+  ctx.strokeStyle = '#c8f0c8'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.ellipse(x+9, y+5, 4, 3, 0, 0, Math.PI*2); ctx.stroke();
+  // $ — vertical bar
+  ctx.fillStyle = C.white;
+  ctx.fillRect(x+8, y+1, 2, 8);
+  // $ — top and bottom arcs (S shape)
+  ctx.fillRect(x+6, y+2, 5, 1);
+  ctx.fillRect(x+6, y+4, 5, 1);
+  ctx.fillRect(x+6, y+6, 5, 1);
+  ctx.fillStyle = '#3da83d';  // erase corners to make S curves
+  ctx.fillRect(x+10, y+2, 1, 1);
+  ctx.fillRect(x+6,  y+6, 1, 1);
+  // Corner serifs (cream dots, like ornate bill corners)
+  ctx.fillStyle = '#c8f0c8';
+  ctx.fillRect(x+1,  y+1,  2, 2);
+  ctx.fillRect(x+15, y+1,  2, 2);
+  ctx.fillRect(x+1,  y+7,  2, 2);
+  ctx.fillRect(x+15, y+7,  2, 2);
+}
+
+// ── DRAW GAS STATION ─────────────────────────────────────────────────────────
+function drawGasStation(x, y) {
+  x = Math.floor(x); y = Math.floor(y);
+  // Building
+  rect(x, y, 70, 60, C.cream);
+  rect(x, y, 70, 8, C.red);
+  // Sign
+  rect(x+5, y+10, 60, 14, C.white);
+  border(x+5, y+10, 60, 14, C.black);
+  drawText('GAS', x+8, y+13, C.red, 2);
+  // Door
+  rect(x+25, y+35, 20, 25, C.ltBlue);
+  border(x+25, y+35, 20, 25, C.black);
+  rect(x+33, y+46, 4, 4, C.yellow);
+  // Window
+  rect(x+5, y+35, 16, 16, C.ltBlue);
+  border(x+5, y+35, 16, 16, C.black);
+  // Pump
+  rect(x+55, y+25, 12, 30, C.gray);
+  rect(x+56, y+27, 10, 15, C.white);
+  rect(x+57, y+29, 8, 10, C.ltBlue);
+  rect(x+60, y+40, 4, 4, C.red);
+  rect(x+61, y+18, 2, 8, C.darkGray);
+  // Canopy
+  rect(x-10, y-20, 90, 5, C.red);
+  rect(x+10, y-20, 4, 20, C.gray);
+  rect(x+56, y-20, 4, 20, C.gray);
+  border(x, y, 70, 60, C.black);
+}
+
+// ── DRAW FAMILY CAR (broken down) ────────────────────────────────────────────
+function drawFamilyCar(x, y) {
+  x = Math.floor(x); y = Math.floor(y);
+  const w = 64, h = 24;
+  rect(x, y+8, w, h-8, C.tan);
+  rect(x+8, y, w-16, 9, C.tan);
+  rect(x+10, y+1, 10, 7, C.ltBlue);
+  rect(x+w-20, y+1, 10, 7, C.ltBlue);
+  rect(x+w-4, y+9, 3, 4, C.cream);
+  rect(x+1, y+9, 3, 4, C.cream);
+  // Flat tire
+  rect(x+8, y+h-4, 10, 5, C.darkGray);
+  rect(x+w-18, y+h-4, 10, 5, C.darkGray);
+  rect(x+9, y+h-3, 8, 3, C.gray);
+  // "E" gas gauge sticker on window
+  rect(x+22, y+2, 16, 5, C.yellow);
+  drawText('E', x+25, y+3, C.red, 1);
+  // Smoke from hood
+  ctx.fillStyle = 'rgba(200,200,200,0.6)';
+  ctx.beginPath(); ctx.arc(x+w-8, y+4, 4, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+w-4, y+1, 3, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+w, y-2, 2, 0, Math.PI*2); ctx.fill();
+  border(x, y+8, w, h-8, C.black);
+
+  // Family members visible in windows
+  rect(x+12, y+10, 6, 6, C.skin); // mom
+  rect(x+24, y+10, 6, 6, C.skin); // dad
+  rect(x+38, y+10, 5, 5, C.skin); // sister
+}
+
+// ── DRAW HEARTS (health) ──────────────────────────────────────────────────────
+function drawHeart(x, y, filled) {
+  ctx.fillStyle = filled ? C.red : C.darkGray;
+  // 7x6 heart
+  const hpx = [[1,0],[2,0],[4,0],[5,0],[0,1],[1,1],[2,1],[3,1],[4,1],[5,1],[6,1],
+                [0,2],[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],
+                [1,3],[2,3],[3,3],[4,3],[5,3],[2,4],[3,4],[4,4],[3,5]];
+  for (const [px,py] of hpx) {
+    ctx.fillRect(x+px, y+py, 1, 1);
+  }
+}
+
+// ── DRAW STAR (decorative) ────────────────────────────────────────────────────
+function drawStar(x, y, size, color) {
+  ctx.fillStyle = color;
+  const pts = [];
+  for (let i=0; i<5; i++) {
+    const outerA = (i*2*Math.PI/5) - Math.PI/2;
+    const innerA = outerA + Math.PI/5;
+    pts.push([x + Math.cos(outerA)*size, y + Math.sin(outerA)*size]);
+    pts.push([x + Math.cos(innerA)*size*0.4, y + Math.sin(innerA)*size*0.4]);
+  }
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i=1; i<pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.closePath(); ctx.fill();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCENE: TITLE SCREEN
+// ═══════════════════════════════════════════════════════════════════════════════
+const TitleScene = {
+  t: 0,
+  bgCars: [],
+  init() {
+    this.t = 0;
+    this.bgCars = [];
+    for (let i=0; i<5; i++) {
+      this.bgCars.push({ x: 80 + i*90, y: 210, type: i, speed: 0.5+Math.random()*0.3 });
+    }
+  },
+  update(dt) {
+    this.t += dt;
+    for (const c of this.bgCars) {
+      c.x -= c.speed;
+      if (c.x < -60) c.x = BASE_W + 60;
+    }
+    if (consumeKey('Enter') || consumeKey('Space')) {
+      setScene(BackstoryScene);
+    }
+  },
+  draw() {
+    // Sky gradient
+    const grad = ctx.createLinearGradient(0,0,0,BASE_H*0.7);
+    grad.addColorStop(0, '#1a3a6b');
+    grad.addColorStop(0.5, '#4a6fa5');
+    grad.addColorStop(1, '#87CEEB');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, BASE_W, BASE_H*0.7);
+
+    // Stars
+    const stars = [[20,15],[60,8],[100,20],[150,5],[200,18],[240,10],[290,22],[340,6],[390,14],[440,19],[470,7]];
+    for (const [sx,sy] of stars) {
+      const twinkle = Math.sin(this.t*3 + sx) * 0.5 + 0.5;
+      ctx.fillStyle = `rgba(255,255,255,${0.4+twinkle*0.6})`;
+      ctx.fillRect(sx, sy, 2, 2);
+    }
+
+    // Moon
+    ctx.fillStyle = C.cream;
+    ctx.beginPath(); ctx.arc(420, 40, 18, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#4a6fa5';
+    ctx.beginPath(); ctx.arc(425, 36, 14, 0, Math.PI*2); ctx.fill();
+
+    // Road
+    rect(0, BASE_H*0.75, BASE_W, BASE_H*0.25, C.road);
+    rect(0, BASE_H*0.7, BASE_W, 8, C.shoulder);
+    rect(0, BASE_H-12, BASE_W, 12, C.shoulder);
+    for (let dx=0; dx<BASE_W; dx+=40) {
+      rect(dx + (this.t*30%40), BASE_H*0.75+12, 20, 3, C.yellow);
+    }
+
+    // Background cars
+    for (const c of this.bgCars) {
+      drawCar(c.x - 20, c.y, c.type, Math.floor(this.t*8));
+    }
+
+    // Title banner
+    rect(20, 50, BASE_W-40, 70, 'rgba(0,0,0,0.7)');
+    border(20, 50, BASE_W-40, 70, C.yellow);
+    // US Flag stripe accent
+    rect(20, 50, BASE_W-40, 6, C.red);
+    rect(20, 114, BASE_W-40, 6, C.red);
+
+    drawText('AMERICAN', BASE_W/2, 62, C.white, 3, 'center');
+    drawText('WEEKEND', BASE_W/2, 80, C.yellow, 3, 'center');
+    drawText('VACATION', BASE_W/2, 98, C.white, 3, 'center');
+
+    // Stars on banner
+    for (let i=0;i<5;i++) drawStar(30+i*8, 57, 3, C.yellow);
+    for (let i=0;i<5;i++) drawStar(BASE_W-30-i*8, 57, 3, C.yellow);
+
+    // Blink PRESS ENTER
+    if (Math.floor(this.t * 2) % 2 === 0) {
+      drawText('PRESS ENTER TO START', BASE_W/2, 145, C.white, 1, 'center');
+    }
+
+    // Credits
+    drawText('USE ARROW KEYS + SPACE TO JUMP', BASE_W/2, 200, C.gray, 1, 'center');
+    drawText('AVOID CARS - REACH THE GAS STATION!', BASE_W/2, 210, C.gray, 1, 'center');
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCENE: BACKSTORY
+// ═══════════════════════════════════════════════════════════════════════════════
+const BackstoryScene = {
+  page: 0,
+  t: 0,
+  pages: [
+    {
+      lines: [
+        "IT'S FRIDAY MORNING.",
+        "THE BUTLER FAMILY HAD PLANNED",
+        "THE PERFECT ROAD TRIP.",
+        "",
+        "DESTINATION: THE BEACH.",
+        "DEPARTURE: 6:00 AM.",
+      ],
+      bg: '#1a1a2e',
+      accent: C.yellow,
+    },
+    {
+      lines: [
+        "BUT NOBODY SET AN ALARM...",
+        "",
+        "MOM, DAD, CONNOR, AND CHLOE",
+        "ALL SLEPT RIGHT THROUGH THE",
+        "EARLY MORNING.",
+        "",
+        "THEY WOKE UP AT 10:47 AM!",
+      ],
+      bg: '#2e1a1a',
+      accent: C.orange,
+    },
+    {
+      lines: [
+        "IN A PANIC, THEY THREW BAGS",
+        "IN THE CAR AND SPED OFF.",
+        "",
+        "NOBODY NOTICED THE GAS",
+        "GAUGE WAS ON EMPTY...",
+      ],
+      bg: '#1a2e1a',
+      accent: C.red,
+    },
+    {
+      lines: [
+        "MILES FROM ANYWHERE,",
+        "THE CAR SPUTTERED AND DIED",
+        "ON THE HIGHWAY.",
+        "",
+        "\"I'LL GO GET GAS!\"",
+        "SAID CONNOR.",
+        "",
+        "\"BE CAREFUL OUT THERE!\"",
+      ],
+      bg: '#1a1a1a',
+      accent: C.ltBlue,
+    },
+  ],
+  init() { this.page = 0; this.t = 0; },
+  update(dt) {
+    this.t += dt;
+    if (consumeKey('Enter') || consumeKey('Space')) {
+      this.page++;
+      this.t = 0;
+      if (this.page >= this.pages.length) {
+        setScene(LevelSelectScene);
+      }
+    }
+  },
+  draw() {
+    const p = this.pages[this.page];
+    rect(0, 0, BASE_W, BASE_H, p.bg);
+
+    // Decorative border
+    border(4, 4, BASE_W-8, BASE_H-8, p.accent);
+    border(6, 6, BASE_W-12, BASE_H-12, 'rgba(255,255,255,0.1)');
+
+    // Page indicator stars
+    for (let i=0; i<this.pages.length; i++) {
+      drawStar(BASE_W/2 - (this.pages.length-1)*8 + i*16, 18, 4, i===this.page ? p.accent : C.darkGray);
+    }
+
+    // Text lines with fade-in
+    const lineH = 18;
+    const startY = 35;
+    for (let i=0; i<p.lines.length; i++) {
+      const revealTime = i * 0.3;
+      const alpha = Math.min(1, (this.t - revealTime) * 3);
+      if (alpha <= 0) continue;
+      ctx.globalAlpha = alpha;
+      const color = i === 0 ? p.accent : C.white;
+      drawText(p.lines[i], BASE_W/2, startY + i*lineH, color, 1, 'center');
+    }
+    ctx.globalAlpha = 1;
+
+    // Prompt
+    if (this.t > p.lines.length * 0.3 + 0.5) {
+      const blink = Math.floor(this.t * 2) % 2;
+      if (blink) {
+        const label = this.page < this.pages.length-1 ? 'PRESS ENTER FOR NEXT' : 'PRESS ENTER TO PLAY';
+        drawText(label, BASE_W/2, BASE_H-18, p.accent, 1, 'center');
+      }
+    }
+
+    // Page number
+    drawText(`${this.page+1}/${this.pages.length}`, BASE_W-12, BASE_H-12, C.gray, 1, 'right');
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCENE: LEVEL SELECT
+// ═══════════════════════════════════════════════════════════════════════════════
+const LevelSelectScene = {
+  selected: 0,
+  t: 0,
+  levels: [
+    { name: 'LEVEL 1', sub: 'HIGHWAY TO GAS', locked: false, color: C.green },
+    { name: 'LEVEL 2', sub: 'COMING SOON', locked: true, color: C.darkGray },
+    { name: 'LEVEL 3', sub: 'COMING SOON', locked: true, color: C.darkGray },
+  ],
+  init() { this.selected = 0; this.t = 0; },
+  update(dt) {
+    this.t += dt;
+    if (consumeKey('ArrowUp') || consumeKey('ArrowLeft')) {
+      do { this.selected = (this.selected - 1 + this.levels.length) % this.levels.length; }
+      while (this.levels[this.selected].locked && this.selected !== 0);
+    }
+    if (consumeKey('ArrowDown') || consumeKey('ArrowRight')) {
+      do { this.selected = (this.selected + 1) % this.levels.length; }
+      while (this.levels[this.selected].locked);
+    }
+    if (consumeKey('Enter') || consumeKey('Space')) {
+      if (!this.levels[this.selected].locked) {
+        setScene(Level1Scene);
+      }
+    }
+    if (consumeKey('KeyH')) setScene(HighScoreScene);
+    if (consumeKey('Escape')) setScene(TitleScene);
+  },
+  draw() {
+    rect(0, 0, BASE_W, BASE_H, '#0d1b2a');
+    // Background road stripes
+    for (let i=0; i<BASE_W; i+=40) {
+      rect((i + this.t*20) % (BASE_W+40) - 20, BASE_H-30, 20, 4, 'rgba(255,255,0,0.1)');
+    }
+    rect(0, BASE_H-40, BASE_W, 40, 'rgba(0,0,0,0.4)');
+
+    drawText('SELECT LEVEL', BASE_W/2, 20, C.yellow, 2, 'center');
+
+    for (let i=0; i<this.levels.length; i++) {
+      const lv = this.levels[i];
+      const bx = BASE_W/2 - 90;
+      const by = 55 + i*60;
+      const bw = 180, bh = 48;
+      const isSelected = i === this.selected;
+
+      // Card
+      const cardColor = isSelected ? lv.color : 'rgba(30,30,50,0.9)';
+      rect(bx, by, bw, bh, cardColor);
+      border(bx, by, bw, bh, isSelected ? C.white : lv.color);
+      if (isSelected) border(bx+2, by+2, bw-4, bh-4, 'rgba(255,255,255,0.3)');
+
+      if (lv.locked) {
+        drawText('LOCKED', BASE_W/2, by+14, C.gray, 2, 'center');
+        drawText(lv.sub, BASE_W/2, by+32, C.darkGray, 1, 'center');
+        // Lock icon
+        rect(BASE_W/2-3, by+15, 6, 5, C.gray);
+        rect(BASE_W/2-2, by+12, 4, 4, 'rgba(0,0,0,0)');
+        ctx.strokeStyle = C.gray; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.arc(BASE_W/2, by+15, 3, Math.PI, 0); ctx.stroke();
+      } else {
+        drawText(lv.name, BASE_W/2, by+10, isSelected ? C.white : lv.color, 2, 'center');
+        drawText(lv.sub, BASE_W/2, by+30, isSelected ? C.cream : C.gray, 1, 'center');
+        // Best score
+        const scores = loadScores();
+        if (scores.length > 0) {
+          drawText('BEST: ' + formatScore(scores[0].score) + ' PTS', BASE_W/2, by+40, isSelected ? C.yellow : C.gray, 1, 'center');
+        }
+      }
+    }
+
+    drawText('H - HIGHSCORES', BASE_W/2, BASE_H-28, C.gray, 1, 'center');
+    drawText('ESC - TITLE', BASE_W/2, BASE_H-18, C.gray, 1, 'center');
+
+    // Arrow indicators
+    if (Math.floor(this.t*2)%2) {
+      drawText('>', bx=BASE_W/2 - 98, 55+this.selected*60+16, C.white, 2);
+    }
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCENE: HIGH SCORES
+// ═══════════════════════════════════════════════════════════════════════════════
+const HighScoreScene = {
+  t: 0,
+  init() { this.t = 0; },
+  update(dt) {
+    this.t += dt;
+    if (consumeKey('Escape') || consumeKey('Enter')) setScene(LevelSelectScene);
+  },
+  draw() {
+    rect(0, 0, BASE_W, BASE_H, '#0a0a1a');
+
+    // Animated top strip
+    rect(0, 0, BASE_W, 3, C.red);
+    rect(0, 3, BASE_W, 3, C.white);
+    rect(0, 6, BASE_W, 3, C.blue);
+    rect(0, BASE_H-9, BASE_W, 3, C.blue);
+    rect(0, BASE_H-6, BASE_W, 3, C.white);
+    rect(0, BASE_H-3, BASE_W, 3, C.red);
+
+    drawText('HIGH SCORES', BASE_W/2, 20, C.yellow, 2, 'center');
+    drawText('LEVEL 1 - HIGHWAY TO GAS', BASE_W/2, 38, C.white, 1, 'center');
+
+    const scores = loadScores();
+    const colRank = 30, colInit = 75, colScore = 210;
+
+    rect(20, 50, BASE_W-40, 1, C.gray);
+    drawText('RANK', colRank, 55, C.gray, 1);
+    drawText('NAME', colInit, 55, C.gray, 1);
+    drawText('SCORE', colScore, 55, C.gray, 1, 'right');
+    rect(20, 64, BASE_W-40, 1, C.gray);
+
+    if (scores.length === 0) {
+      drawText('NO SCORES YET!', BASE_W/2, 120, C.gray, 2, 'center');
+      drawText('COLLECT DOLLARS TO SCORE POINTS!', BASE_W/2, 145, C.gray, 1, 'center');
+    } else {
+      for (let i=0; i<scores.length; i++) {
+        const s = scores[i];
+        const sy = 70 + i * 17;
+        const rowColor = i === 0 ? C.yellow : i < 3 ? C.white : C.gray;
+        if (i === 0) {
+          rect(18, sy-1, BASE_W-36, 15, 'rgba(255,220,0,0.1)');
+          drawStar(colRank - 12, sy+4, 4, C.yellow);
+        }
+        drawText(`${i+1}.`, colRank, sy, rowColor, 1);
+        drawText(s.initials, colInit, sy, rowColor, 1);
+        drawText(formatScore(s.score) + ' PTS', colScore, sy, rowColor, 1, 'right');
+      }
+    }
+
+    if (Math.floor(this.t*2)%2) {
+      drawText('PRESS ESC OR ENTER TO GO BACK', BASE_W/2, BASE_H-22, C.gray, 1, 'center');
+    }
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCENE: INITIALS ENTRY
+// ═══════════════════════════════════════════════════════════════════════════════
+const InitialsScene = {
+  initials: ['A','A','A'],
+  cursor: 0,
+  score: 0,
+  t: 0,
+  done: false,
+  init() {
+    this.initials = ['A','A','A'];
+    this.cursor = 0;
+    this.t = 0;
+    this.done = false;
+  },
+  setScore(pts) { this.score = pts; },
+  update(dt) {
+    this.t += dt;
+    if (this.done) return;
+    if (consumeKey('ArrowUp')) {
+      const ch = this.initials[this.cursor];
+      const code = ch.charCodeAt(0);
+      this.initials[this.cursor] = String.fromCharCode(code < 90 ? code+1 : 65);
+    }
+    if (consumeKey('ArrowDown')) {
+      const ch = this.initials[this.cursor];
+      const code = ch.charCodeAt(0);
+      this.initials[this.cursor] = String.fromCharCode(code > 65 ? code-1 : 90);
+    }
+    if (consumeKey('ArrowRight') || consumeKey('Enter')) {
+      if (this.cursor < 2) {
+        this.cursor++;
+      } else {
+        // Submit
+        addScore(this.initials.join(''), this.score);
+        this.done = true;
+        setTimeout(() => setScene(HighScoreScene), 1500);
+      }
+    }
+    if (consumeKey('ArrowLeft') && this.cursor > 0) this.cursor--;
+  },
+  draw() {
+    rect(0, 0, BASE_W, BASE_H, '#0a0a1a');
+    border(20, 20, BASE_W-40, BASE_H-40, C.yellow);
+
+    drawText('NEW HIGH SCORE!', BASE_W/2, 35, C.yellow, 2, 'center');
+    drawText('YOUR SCORE: ' + formatScore(this.score) + ' PTS', BASE_W/2, 60, C.white, 1, 'center');
+    drawText('ENTER YOUR INITIALS', BASE_W/2, 85, C.gray, 1, 'center');
+
+    // Initials display
+    for (let i=0; i<3; i++) {
+      const ix = BASE_W/2 - 30 + i*30;
+      const iy = 110;
+      const isActive = i === this.cursor && !this.done;
+      rect(ix-2, iy-2, 24, 24, isActive ? 'rgba(255,220,0,0.2)' : 'rgba(255,255,255,0.05)');
+      border(ix-2, iy-2, 24, 24, isActive ? C.yellow : C.gray);
+      drawText(this.initials[i], ix+2, iy+3, isActive ? C.yellow : C.white, 3);
+      if (isActive && Math.floor(this.t*3)%2) {
+        rect(ix, iy+20, 20, 2, C.yellow);
+      }
+    }
+
+    if (!this.done) {
+      drawText('UP/DOWN: CHANGE LETTER', BASE_W/2, 155, C.gray, 1, 'center');
+      drawText('RIGHT/ENTER: NEXT / CONFIRM', BASE_W/2, 167, C.gray, 1, 'center');
+      drawText('LEFT: BACK', BASE_W/2, 179, C.gray, 1, 'center');
+    } else {
+      drawText('SCORE SAVED!', BASE_W/2, 160, C.green, 2, 'center');
+    }
+
+    // Stars
+    for (let i=0;i<7;i++) {
+      drawStar(30+i*60, 220, 5+Math.sin(this.t*2+i)*2, C.yellow);
+    }
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCENE: LEVEL 1 - HIGHWAY TO GAS
+// ═══════════════════════════════════════════════════════════════════════════════
+const Level1Scene = {
+  // Player
+  px: 60, py: 0, pvx: 0, pvy: 0,
+  onGround: false,
+  facingRight: true,
+  health: 3,
+  invincible: 0,
+  walkFrame: 0,
+  walkTimer: 0,
+  hasGasCan: false,
+
+  // World
+  scrollX: 0,
+  worldWidth: 6000,
+  groundY: 0,
+
+  // Obstacles
+  groundCars: [],
+  flyingCars: [],
+
+  // Goal
+  gasStationX: 5600,
+  reachedStation: false,
+
+  // Timing
+  startTime: 0,
+  elapsed: 0,
+  finished: false,
+  finishTimer: 0,
+
+  // Scoring
+  score: 0,
+  dollarScore: 0,
+  lifeBonus: 0,
+  finalScore: 0,
+
+  // Collectibles
+  dollars: [],
+
+  // Spawn (time-based)
+  gameStarted: false,
+  gameElapsed: 0,
+  nextCarSpawnTime: 0,
+
+  // Background parallax
+  cloudX: [],
+  bgTreeX: [],
+
+  // HUD flash
+  hitFlash: 0,
+
+  init() {
+    // groundY must be set first so px/py can reference it
+    this.groundY = BASE_H - 50;
+
+    // Start Connor on the ground just to the right of the family car (world x≈84)
+    this.px = 100;
+    this.py = this.groundY - 20; // feet on ground immediately, no falling
+    this.pvx = 0; this.pvy = 0;
+    this.onGround = true;
+    this.facingRight = true;
+    this.health = 3;
+    this.invincible = 0;
+    this.walkFrame = 0;
+    this.walkTimer = 0;
+    this.hasGasCan = false;
+    this.scrollX = 0;
+    this.groundCars = [];
+    this.flyingCars = [];
+    this.reachedStation = false;
+    this.startTime = 0;  // set when player first moves
+    this.elapsed = 0;
+    this.finished = false;
+    this.finishTimer = 0;
+    this.score = 0;
+    this.dollarScore = 0;
+    this.lifeBonus = 0;
+    this.finalScore = 0;
+    this.dollars = [];
+    this.gameStarted = false;
+    this.gameElapsed = 0;
+    this.nextCarSpawnTime = 2.0; // first car 2 s after player starts moving
+    this.hitFlash = 0;
+    this.cloudX = [];
+    this.bgTreeX = [];
+
+    // Clouds
+    for (let i=0; i<8; i++) {
+      this.cloudX.push({ x: 100 + i*550, y: 20 + Math.random()*40, w: 40+Math.random()*30, speed: 0.2+Math.random()*0.1 });
+    }
+    // Place 20 dollars spread across the level
+    this.placeDollars();
+  },
+
+  spawnGroundCar(wx) {
+    const type = Math.floor(Math.random()*5);
+    const configs = [40,52,44,50,38];
+    const w = configs[type];
+    const speed = 1.5 + Math.random()*1.5;
+    this.groundCars.push({ wx, w, type, speed, frame: 0 });
+  },
+
+  spawnFlyingCar(wx) {
+    const type = Math.floor(Math.random()*4);
+    // Flying cars sit just above Connor's head so the player must run UNDER them.
+    // Connor running occupies y=200-220 (head at 200); peak jump reaches y=160-180.
+    // flyY 165-171 means car bottom is at 181-187 — clears Connor's head (200) by 13-19px
+    // but overlaps his jump arc (160-180), so jumping into one deals damage.
+    const flyY = this.groundY - 55 + Math.floor(Math.random() * 6); // 165-171
+    const speed = 1.8 + Math.random() * 1.5;
+    this.flyingCars.push({ wx, flyY, type, speed, frame: 0 });
+  },
+
+  placeDollars() {
+    const startX = 400;
+    const endX = this.gasStationX - 400;
+    const spacing = (endX - startX) / 19;
+    for (let i = 0; i < 20; i++) {
+      const wx = startX + i * spacing + (Math.random() - 0.5) * spacing * 0.6;
+      const r = Math.random();
+      // 60% ground level (easy), 30% mid-jump (medium), 10% peak-jump (hard but reachable)
+      const wy = r < 0.6 ? this.groundY - 12   // 208, easy grab
+               : r < 0.9 ? this.groundY - 35   // 185, requires a small jump
+               :            this.groundY - 55;  // 165, only reachable at peak jump
+      this.dollars.push({ wx, wy, collected: false });
+    }
+  },
+
+  checkCollision(wx, wy, ww, wh, carX, carY, carW, carH) {
+    return wx < carX+carW && wx+ww > carX && wy < carY+carH && wy+wh > carY;
+  },
+
+  update(dt) {
+    if (this.finished) {
+      this.finishTimer += dt;
+      if (this.finishTimer > 2.5) {
+        if (isHighScore(this.finalScore)) {
+          InitialsScene.setScore(this.finalScore);
+          setScene(InitialsScene);
+        } else {
+          setScene(LevelSelectScene);
+        }
+      }
+      return;
+    }
+
+    // Detect first input and start the clock
+    if (!this.gameStarted) {
+      const anyKey = keys['ArrowRight'] || keys['KeyD'] || keys['ArrowLeft'] || keys['KeyA'] ||
+                     keys['Space'] || keys['ArrowUp'] || keys['KeyW'];
+      if (anyKey) {
+        this.gameStarted = true;
+        this.startTime = performance.now();
+      }
+    }
+
+    if (this.gameStarted) {
+      this.elapsed = (performance.now() - this.startTime) / 1000;
+      this.gameElapsed += dt;
+    }
+
+    this.hitFlash = Math.max(0, this.hitFlash - dt);
+    this.invincible = Math.max(0, this.invincible - dt);
+
+    // ── PLAYER MOVEMENT ──
+    const SPEED = 90;
+    const JUMP_V = -200;
+    const GRAVITY = 500;
+
+    this.pvx = 0;
+    if (keys['ArrowRight'] || keys['KeyD']) {
+      this.pvx = SPEED;
+      this.facingRight = true;
+    }
+    if (keys['ArrowLeft'] || keys['KeyA']) {
+      this.pvx = -SPEED * 0.6;
+      this.facingRight = false;
+    }
+
+    // Jump
+    if ((keys['Space'] || keys['ArrowUp'] || keys['KeyW']) && this.onGround) {
+      this.pvy = JUMP_V;
+      this.onGround = false;
+    }
+
+    this.pvy += GRAVITY * dt;
+    this.px += this.pvx * dt;
+    this.py += this.pvy * dt;
+
+    // Ground collision
+    const groundLocal = this.groundY - 20; // player feet Y in screen coords; store world px,py
+    if (this.py + 20 >= this.groundY) {
+      this.py = this.groundY - 20;
+      this.pvy = 0;
+      this.onGround = true;
+    }
+
+    // Clamp player left boundary
+    if (this.px - this.scrollX < 20) this.px = this.scrollX + 20;
+
+    // Walk animation
+    if (this.pvx !== 0 && this.onGround) {
+      this.walkTimer += dt;
+      if (this.walkTimer > 0.12) { this.walkTimer = 0; this.walkFrame = (this.walkFrame+1)%4; }
+    } else if (this.onGround) {
+      this.walkFrame = 0;
+    }
+
+    // ── SCROLL ──
+    const targetScroll = this.px - 80;
+    this.scrollX += (targetScroll - this.scrollX) * Math.min(1, dt*8);
+    this.scrollX = Math.max(0, Math.min(this.worldWidth - BASE_W, this.scrollX));
+
+    // ── COLLECT DOLLARS ──
+    for (const d of this.dollars) {
+      if (d.collected) continue;
+      if (this.checkCollision(this.px - 6, this.py, 12, 20, d.wx, d.wy, 18, 10)) {
+        d.collected = true;
+        this.score += 100;
+        this.dollarScore += 100;
+      }
+    }
+    this.dollars = this.dollars.filter(d => !d.collected && d.wx > this.scrollX - 60);
+
+    // ── SPAWN OBSTACLES (one car every 1-3 s, only after player moves) ──
+    if (this.gameStarted && this.gameElapsed >= this.nextCarSpawnTime) {
+      const spawnX = Math.floor(this.scrollX + BASE_W + 80);
+      if (spawnX < this.gasStationX - 200) {
+        if (Math.random() < 0.3) {
+          this.spawnFlyingCar(spawnX);
+        } else {
+          this.spawnGroundCar(spawnX);
+        }
+      }
+      this.nextCarSpawnTime = this.gameElapsed + 1 + Math.random(); // next car in 1-2 s
+    }
+
+    // ── UPDATE GROUND CARS ──
+    const player_wx = this.px;
+    const player_wy = this.py;
+    const PW = 12, PH = 20;
+
+    for (const c of this.groundCars) {
+      c.wx -= c.speed;
+      c.frame++;
+
+      if (this.invincible <= 0) {
+        const carScreenY = this.groundY - 24;
+        if (this.checkCollision(player_wx-PW/2, player_wy, PW, PH, c.wx-c.w/2, carScreenY, c.w, 24)) {
+          this.health--;
+          this.invincible = 2.5;
+          this.hitFlash = 0.3;
+          if (this.health <= 0) this.gameOver();
+        }
+      }
+    }
+    this.groundCars = this.groundCars.filter(c => c.wx > this.scrollX - 200);
+
+    // ── UPDATE FLYING CARS ──
+    for (const fc of this.flyingCars) {
+      fc.wx -= fc.speed;
+      fc.frame++;
+      const flyY = fc.flyY;
+
+      if (this.invincible <= 0) {
+        if (this.checkCollision(player_wx-PW/2, player_wy, PW, PH, fc.wx-18, flyY, 36, 16)) {
+          this.health--;
+          this.invincible = 2.5;
+          this.hitFlash = 0.3;
+          if (this.health <= 0) this.gameOver();
+        }
+      }
+    }
+    this.flyingCars = this.flyingCars.filter(c => c.wx > this.scrollX - 200);
+
+    // ── CHECK GOAL ──
+    if (!this.reachedStation && this.px > this.gasStationX + 10) {
+      this.reachedStation = true;
+      this.lifeBonus = this.health === 3 ? 500 : this.health === 2 ? 200 : 0;
+      this.score += this.lifeBonus;
+      this.finalScore = this.score;
+      this.finished = true;
+      this.finishTimer = 0;
+    }
+
+    // Clouds
+    for (const cl of this.cloudX) {
+      cl.x -= cl.speed;
+      if (cl.x + cl.w < 0) cl.x = BASE_W + cl.w;
+    }
+  },
+
+  gameOver() {
+    setScene(GameOverScene);
+  },
+
+  draw() {
+    const sx = Math.floor(this.scrollX);
+
+    // ── SKY ──
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, BASE_H*0.65);
+    skyGrad.addColorStop(0, '#87CEEB');
+    skyGrad.addColorStop(1, '#d4ecf7');
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, BASE_W, BASE_H*0.65);
+
+    // Clouds
+    for (const cl of this.cloudX) {
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.fillRect(cl.x, cl.y, cl.w, 10);
+      ctx.fillRect(cl.x+5, cl.y-6, cl.w-10, 10);
+      ctx.fillRect(cl.x+8, cl.y-10, cl.w-20, 8);
+    }
+
+    // Far background hills
+    ctx.fillStyle = '#a8d5a2';
+    for (let i=0; i<6; i++) {
+      const hx = ((i*180 - sx*0.1) % (BASE_W+160)) - 40;
+      ctx.beginPath(); ctx.arc(hx+50, BASE_H*0.65, 50, 0, Math.PI); ctx.fill();
+    }
+
+    // ── ROAD ──
+    rect(0, this.groundY - 30, BASE_W, 80, C.road);
+    // Shoulder markings
+    rect(0, this.groundY - 30, BASE_W, 4, C.shoulder);
+    rect(0, this.groundY + 44, BASE_W, 4, C.shoulder);
+    // Center dashes (world-scrolled)
+    const dashOffset = sx % 40;
+    for (let dx=(-dashOffset); dx<BASE_W; dx+=40) {
+      rect(dx, this.groundY - 2, 20, 4, C.roadLine);
+    }
+
+    // ── FAMILY CAR (stationary at start) ──
+    const familyCarX = 0 - sx + 20;
+    if (familyCarX > -80 && familyCarX < BASE_W) {
+      drawFamilyCar(familyCarX, this.groundY - 24);
+    }
+
+    // ── GROUND CARS ──
+    for (const c of this.groundCars) {
+      const cx = c.wx - sx - c.w/2;
+      if (cx > -60 && cx < BASE_W+20) {
+        drawCar(cx, this.groundY - 24, c.type, c.frame);
+      }
+    }
+
+    // ── FLYING CARS ──
+    for (const fc of this.flyingCars) {
+      const fcx = fc.wx - sx - 18;
+      const fcy = fc.flyY;
+      if (fcx > -50 && fcx < BASE_W+20) {
+        drawFlyingCar(fcx, fcy, fc.type, fc.frame);
+      }
+    }
+
+    // ── GAS STATION ──
+    const gsx = this.gasStationX - sx;
+    if (gsx > -80 && gsx < BASE_W+10) {
+      drawGasStation(gsx, this.groundY - 60);
+      // Arrow pointing to station
+      if (gsx > BASE_W - 20) {
+        ctx.fillStyle = C.yellow;
+        const ax = BASE_W - 20;
+        const ay = 30;
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(ax+12, ay+8);
+        ctx.lineTo(ax, ay+16);
+        ctx.fill();
+        drawText('GAS', ax-14, ay+3, C.yellow, 1);
+      }
+    }
+
+    // ── DISTANCE INDICATOR ──
+    if (gsx > BASE_W) {
+      const dist = Math.max(0, Math.round((this.gasStationX - this.px) / 10));
+      drawText(`${dist}m TO GAS`, BASE_W - 4, 8, C.yellow, 1, 'right');
+    }
+
+    // ── PLAYER ──
+    const playerScreenX = Math.floor(this.px - sx - 8);
+    const playerScreenY = Math.floor(this.py);
+    const showPlayer = this.invincible <= 0 || Math.floor(this.invincible * 10) % 2 === 0;
+    if (showPlayer) {
+      drawConnor(playerScreenX, playerScreenY, this.walkFrame, this.facingRight, this.hasGasCan);
+    }
+
+    // ── DOLLARS ──
+    const gt = performance.now() / 1000;
+    for (const d of this.dollars) {
+      if (d.collected) continue;
+      const dx = d.wx - sx;
+      if (dx > -20 && dx < BASE_W + 20) drawDollarBill(dx, d.wy, gt);
+    }
+
+    // ── HUD ──
+    // Score (only show once game has started)
+    if (this.gameStarted) {
+      drawText('$' + formatScore(this.score), BASE_W/2, 6, C.yellow, 1, 'center');
+    } else {
+      // Waiting-to-start prompt
+      if (Math.floor(performance.now() / 500) % 2 === 0) {
+        drawText('PRESS ANY KEY TO START', BASE_W/2, BASE_H/2 - 20, C.yellow, 1, 'center');
+      }
+      drawText('ARROW KEYS TO MOVE  SPACE TO JUMP', BASE_W/2, BASE_H/2 - 8, C.white, 1, 'center');
+    }
+
+    // Health hearts
+    for (let i=0; i<3; i++) {
+      drawHeart(8 + i*14, 6, i < this.health);
+    }
+
+    // Hit flash overlay
+    if (this.hitFlash > 0) {
+      ctx.fillStyle = `rgba(255,0,0,${this.hitFlash/0.3 * 0.3})`;
+      ctx.fillRect(0, 0, BASE_W, BASE_H);
+    }
+
+    // Invincibility notice
+    if (this.invincible > 0 && this.invincible < 2.5) {
+      if (Math.floor(this.invincible*4)%2) {
+        drawText('!', this.px - sx, this.py - 8, C.red, 2, 'center');
+      }
+    }
+
+    // ── FINISH OVERLAY ──
+    if (this.finished) {
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(0, 0, BASE_W, BASE_H);
+      drawText('LEVEL COMPLETE!', BASE_W/2, 60, C.yellow, 2, 'center');
+      drawText('NICE WORK, CONNOR!', BASE_W/2, 82, C.green, 1, 'center');
+      rect(BASE_W/2 - 90, 94, 180, 1, C.gray);
+      drawText('DOLLARS:  ' + formatScore(this.dollarScore) + ' PTS', BASE_W/2, 100, C.white, 1, 'center');
+      const bonusLabel = this.lifeBonus > 0 ? '+' + this.lifeBonus + ' PTS' : 'NONE';
+      const bonusColor = this.lifeBonus > 0 ? C.green : C.gray;
+      drawText('LIFE BONUS:  ' + bonusLabel, BASE_W/2, 114, bonusColor, 1, 'center');
+      rect(BASE_W/2 - 90, 126, 180, 1, C.gray);
+      drawText('TOTAL:  ' + formatScore(this.finalScore) + ' PTS', BASE_W/2, 132, C.yellow, 1, 'center');
+    }
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCENE: GAME OVER
+// ═══════════════════════════════════════════════════════════════════════════════
+const GameOverScene = {
+  t: 0,
+  init() { this.t = 0; },
+  update(dt) {
+    this.t += dt;
+    if (this.t > 1) {
+      if (consumeKey('Enter') || consumeKey('Space')) setScene(Level1Scene);
+      if (consumeKey('Escape')) setScene(LevelSelectScene);
+    }
+  },
+  draw() {
+    rect(0, 0, BASE_W, BASE_H, '#1a0000');
+
+    // Animated danger stripes
+    const stripe = Math.floor(this.t * 4) % 2;
+    for (let i=0; i<BASE_W; i+=20) {
+      ctx.fillStyle = stripe ? 'rgba(180,0,0,0.3)' : 'rgba(100,0,0,0.2)';
+      ctx.fillRect(i, 0, 10, BASE_H);
+    }
+
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(30, 70, BASE_W-60, 100);
+    border(30, 70, BASE_W-60, 100, C.red);
+
+    drawText('GAME OVER', BASE_W/2, 85, C.red, 3, 'center');
+    drawText('CONNOR GOT KNOCKED DOWN!', BASE_W/2, 118, C.white, 1, 'center');
+    drawText('THE FAMILY IS STILL WAITING...', BASE_W/2, 130, C.gray, 1, 'center');
+
+    if (this.t > 1 && Math.floor(this.t*2)%2) {
+      drawText('ENTER - TRY AGAIN', BASE_W/2, 185, C.yellow, 1, 'center');
+      drawText('ESC - LEVEL SELECT', BASE_W/2, 197, C.gray, 1, 'center');
+    }
+
+    // Broken hearts
+    for (let i=0; i<3; i++) {
+      drawHeart(BASE_W/2 - 21 + i*14, 150, false);
+    }
+  }
+};
+
+// ── SCORE FORMATTER ───────────────────────────────────────────────────────────
+function formatScore(pts) {
+  return pts.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MAIN LOOP
+// ═══════════════════════════════════════════════════════════════════════════════
+let lastTime = performance.now();
+
+function gameLoop(now) {
+  const dt = Math.min((now - lastTime) / 1000, 0.05);
+  lastTime = now;
+
+  // Clear justPressed each frame after update
+  scene.update(dt);
+  Object.keys(justPressed).forEach(k => delete justPressed[k]);
+
+  ctx.clearRect(0, 0, BASE_W, BASE_H);
+  scene.draw();
+
+  requestAnimationFrame(gameLoop);
+}
+
+setScene(TitleScene);
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
