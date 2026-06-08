@@ -1837,6 +1837,22 @@ function gameLoop(now) {
   const dt = Math.min((now - lastTime) / 1000, 0.05);
   lastTime = now;
 
+  // ── QUICK SAVE STATE: Numpad1 → Level 1 near gas station ──
+  if (consumeKey('Numpad1')) {
+    setScene(Level1Scene);               // calls init() + placeDollars()
+    scene.px          = scene.gasStationX - 350;
+    scene.py          = scene.groundY - 20;
+    scene.pvx         = 0;
+    scene.pvy         = 0;
+    scene.onGround    = true;
+    scene.scrollX     = scene.px - 80;
+    scene.gameStarted = true;
+    scene.gameElapsed = 10;
+    scene.health      = 3;
+    scene.score       = 900;
+    scene.dollarScore = 900;
+  }
+
   // Clear justPressed each frame after update
   scene.update(dt);
   Object.keys(justPressed).forEach(k => delete justPressed[k]);
