@@ -354,6 +354,144 @@ function drawDollarBill(x, y, t) {
   ctx.fillRect(x+15, y+7,  2, 2);
 }
 
+// ── DRAW CHLOE (front-facing skier, 16×24 px bounding box) ───────────────────
+function drawChloe(x, y, frame) {
+  x = Math.floor(x); y = Math.floor(y);
+  const f = frame % 4;
+
+  // Ground shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.15)';
+  ctx.fillRect(x - 13, y + 14, 26, 3);
+
+  // Skis (horizontal, extend left/right of feet)
+  rect(x - 13, y + 13, 26, 2, '#aabbdd');
+  rect(x - 14, y + 12,  3, 2, '#8899bb'); // left tip (curved)
+  rect(x + 11, y + 12,  3, 2, '#8899bb'); // right tip
+  // Ski bindings
+  rect(x - 5,  y + 10,  4, 3, '#442200');
+  rect(x + 1,  y + 10,  4, 3, '#442200');
+
+  // Ski pants (dark blue)
+  rect(x - 4, y + 4, 3, 7, '#334488');
+  rect(x + 1, y + 4, 3, 7, '#334488');
+
+  // Jacket (hot pink)
+  rect(x - 5, y - 4, 10, 9, '#ee3399');
+  // Jacket collar/zipper
+  rect(x - 1, y - 4, 2, 5, '#cc1177');
+
+  // Arms (slight pole-push animation)
+  const poleOff = (f === 1 || f === 3) ? 1 : 0;
+  rect(x - 9, y - 3, 4, 4, '#ee3399'); // left arm
+  rect(x + 5, y - 3, 4, 4, '#ee3399'); // right arm
+
+  // Ski poles (silver)
+  rect(x - 8, y + 1 + poleOff,     1, 12 - poleOff, '#bbbbbb');
+  rect(x + 8, y + 1,               1, 12,            '#bbbbbb');
+  // Pole baskets (crossbar at bottom)
+  rect(x - 10, y + 12 + poleOff,   3, 1, '#888888');
+  rect(x +  7, y + 12,             3, 1, '#888888');
+
+  // Helmet (bright pink)
+  rect(x - 5, y - 12, 10, 9, '#ff44aa');
+  // Helmet visor brim
+  rect(x - 6, y -  4, 12, 2, '#cc2288');
+
+  // Goggles (cyan stripe)
+  rect(x - 4, y - 11, 8, 3, '#22ccee');
+
+  // Face (skin)
+  rect(x - 3, y - 9, 6, 5, C.skin);
+
+  // Eyes (under goggles)
+  rect(x - 2, y - 9, 2, 1, '#223399');
+  rect(x + 1, y - 9, 2, 1, '#223399');
+
+  // Smile
+  rect(x - 1, y - 6, 3, 1, '#cc7755');
+
+  // Pigtails (brown hair peeking out helmet sides)
+  rect(x - 7, y - 11, 2, 6, C.brown);
+  rect(x - 8, y -  8, 2, 4, C.brown);
+  rect(x + 5, y - 11, 2, 6, C.brown);
+  rect(x + 6, y -  8, 2, 4, C.brown);
+}
+
+// ── DRAW PINE TREE (snowy, ~26×38 px) ────────────────────────────────────────
+function drawPineTree(x, y) {
+  x = Math.floor(x); y = Math.floor(y);
+  // Trunk
+  rect(x - 2, y,      4, 8, '#5c3317');
+  // Drop shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.12)';
+  ctx.fillRect(x - 14, y - 2, 28, 6);
+  // Bottom layer (widest)
+  rect(x - 12, y - 9,  24, 11, '#2a5e2a');
+  rect(x - 11, y - 9,  22,  3, '#ddeeff'); // snow on top
+  rect(x - 10, y - 9,  20,  1, '#eef5ff'); // bright snow highlight
+  // Middle layer
+  rect(x -  8, y - 18, 16, 10, '#2a5e2a');
+  rect(x -  7, y - 18, 14,  3, '#ddeeff');
+  rect(x -  6, y - 18, 12,  1, '#eef5ff');
+  // Top layer
+  rect(x -  4, y - 25,  8,  8, '#2a5e2a');
+  rect(x -  3, y - 25,  6,  3, '#ddeeff');
+  rect(x -  2, y - 25,  4,  1, '#eef5ff');
+  // Tip
+  rect(x -  2, y - 32,  4,  8, '#2a5e2a');
+  rect(x -  1, y - 33,  2,  2, '#ddeeff');
+}
+
+// ── DRAW MOUNTAIN LODGE (goal, ~100×80 px) ────────────────────────────────────
+function drawMountainLodge(x, y) {
+  x = Math.floor(x); y = Math.floor(y);
+  // Warm ambient glow
+  ctx.fillStyle = 'rgba(255,180,60,0.10)';
+  ctx.fillRect(x - 70, y - 70, 140, 130);
+  // Foundation
+  rect(x - 46, y + 10, 92, 8, '#6b4a2a');
+  // Main building walls
+  rect(x - 42, y - 30, 84, 42, '#9a6a42');
+  // Wall detail (log lines)
+  for (let wy = y - 24; wy < y + 10; wy += 6) {
+    rect(x - 40, wy, 78, 1, 'rgba(0,0,0,0.15)');
+  }
+  // A-frame roof
+  rect(x - 52, y - 52, 104, 24, '#5a3820');
+  rect(x - 50, y - 52, 100,  8, '#ddeeff'); // snow on roof
+  rect(x - 48, y - 44,  96,  4, '#eef5ff'); // bright snow edge
+  // Chimney
+  rect(x + 22, y - 66,  8, 20, '#7a4830');
+  rect(x + 21, y - 68, 10,  4, '#5a3820');
+  // Smoke puffs
+  ctx.fillStyle = 'rgba(200,200,200,0.45)';
+  ctx.beginPath(); ctx.arc(x + 26, y - 72, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + 29, y - 78, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + 27, y - 83, 2, 0, Math.PI * 2); ctx.fill();
+  // Windows (warm glow)
+  rect(x - 34, y - 24, 14, 13, '#ffe880');
+  rect(x + 20, y - 24, 14, 13, '#ffe880');
+  border(x - 34, y - 24, 14, 13, '#aa8820');
+  border(x + 20, y - 24, 14, 13, '#aa8820');
+  // Window cross-panes
+  rect(x - 28, y - 24,  1, 13, '#aa8820');
+  rect(x - 34, y - 18, 14,  1, '#aa8820');
+  rect(x + 26, y - 24,  1, 13, '#aa8820');
+  rect(x + 20, y - 18, 14,  1, '#aa8820');
+  // Door arch + door
+  ctx.fillStyle = '#5c3010';
+  ctx.beginPath(); ctx.arc(x, y - 16, 10, Math.PI, 0); ctx.fill();
+  rect(x - 10, y - 16, 20, 26, '#5c3010');
+  border(x - 10, y - 16, 20, 26, '#3a1e08');
+  // Door handle
+  rect(x + 4, y - 4, 3, 3, '#cc9933');
+  // Lodge sign
+  rect(x - 22, y - 38, 44, 10, '#cc9944');
+  border(x - 22, y - 38, 44, 10, '#8a6620');
+  drawText('LODGE', x, y - 35, '#3a1e08', 1, 'center');
+  border(x - 42, y - 30, 84, 42, '#5c3010');
+}
+
 // ── DRAW GAS STATION ─────────────────────────────────────────────────────────
 function drawGasStation(x, y) {
   x = Math.floor(x); y = Math.floor(y);
@@ -643,9 +781,9 @@ const LevelSelectScene = {
   selected: 0,
   t: 0,
   levels: [
-    { name: 'LEVEL 1', sub: 'HIGHWAY TO GAS', locked: false, color: C.green },
-    { name: 'LEVEL 2', sub: 'COMING SOON', locked: true, color: C.darkGray },
-    { name: 'LEVEL 3', sub: 'COMING SOON', locked: true, color: C.darkGray },
+    { name: 'LEVEL 1', sub: 'HIGHWAY TO GAS',  locked: false, color: C.green  },
+    { name: 'LEVEL 2', sub: 'SKI TO THE LODGE', locked: false, color: C.ltBlue },
+    { name: 'LEVEL 3', sub: 'COMING SOON',      locked: true,  color: C.darkGray },
   ],
   init() { this.selected = 0; this.t = 0; },
   update(dt) {
@@ -660,7 +798,8 @@ const LevelSelectScene = {
     }
     if (consumeKey('Enter') || consumeKey('Space')) {
       if (!this.levels[this.selected].locked) {
-        setScene(Level1Scene);
+        if      (this.selected === 0) setScene(Level1Scene);
+        else if (this.selected === 1) setScene(Level2StoryScene);
       }
     }
     if (consumeKey('KeyH')) setScene(HighScoreScene);
@@ -1189,6 +1328,9 @@ const Level1Scene = {
   },
 
   gameOver() {
+    GameOverScene.returnScene = Level1Scene;
+    GameOverScene.line1 = 'CONNOR GOT KNOCKED DOWN!';
+    GameOverScene.line2 = 'THE FAMILY IS STILL WAITING...';
     setScene(GameOverScene);
   },
 
@@ -1350,11 +1492,14 @@ const Level1Scene = {
 // ═══════════════════════════════════════════════════════════════════════════════
 const GameOverScene = {
   t: 0,
+  returnScene: null,          // set by the calling level; falls back to Level1Scene
+  line1: 'CONNOR GOT KNOCKED DOWN!',
+  line2: 'THE FAMILY IS STILL WAITING...',
   init() { this.t = 0; },
   update(dt) {
     this.t += dt;
     if (this.t > 1) {
-      if (consumeKey('Enter') || consumeKey('Space')) setScene(Level1Scene);
+      if (consumeKey('Enter') || consumeKey('Space')) setScene(this.returnScene || Level1Scene);
       if (consumeKey('Escape')) setScene(LevelSelectScene);
     }
   },
@@ -1373,8 +1518,8 @@ const GameOverScene = {
     border(30, 70, BASE_W-60, 100, C.red);
 
     drawText('GAME OVER', BASE_W/2, 85, C.red, 3, 'center');
-    drawText('CONNOR GOT KNOCKED DOWN!', BASE_W/2, 118, C.white, 1, 'center');
-    drawText('THE FAMILY IS STILL WAITING...', BASE_W/2, 130, C.gray, 1, 'center');
+    drawText(this.line1, BASE_W/2, 118, C.white, 1, 'center');
+    drawText(this.line2, BASE_W/2, 130, C.gray, 1, 'center');
 
     if (this.t > 1 && Math.floor(this.t*2)%2) {
       drawText('ENTER - TRY AGAIN', BASE_W/2, 185, C.yellow, 1, 'center');
@@ -1824,6 +1969,381 @@ const BonusDreamScene = {
   },
 };
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCENE: LEVEL 2 STORY  (hiking → lost → lodge light → Chloe volunteers)
+// ═══════════════════════════════════════════════════════════════════════════════
+const Level2StoryScene = {
+  pages: [
+    {
+      lines: [
+        'THE BUTLER FAMILY',
+        'ARRIVED AT THE MOUNTAINS.',
+        '',
+        'TIME TO HIKE!',
+      ],
+      bg: '#1a3a1a', accent: C.green,
+    },
+    {
+      lines: [
+        'AFTER HOURS OF HIKING...',
+        '',
+        'THE TRAIL DISAPPEARED.',
+        '',
+        'THEY WERE COMPLETELY LOST.',
+      ],
+      bg: '#2a2020', accent: C.orange,
+    },
+    {
+      lines: [
+        'FROM THE SUMMIT,',
+        'A WARM LIGHT GLOWED',
+        'IN THE VALLEY BELOW.',
+        '',
+        'A LODGE!',
+      ],
+      bg: '#111122', accent: C.ltBlue,
+    },
+    {
+      lines: [
+        '"THE ONLY WAY DOWN IS TO SKI!"',
+        '',
+        '"I\'LL DO IT!" SAID CHLOE.',
+        '',
+        '"BE CAREFUL OUT THERE!"',
+      ],
+      bg: '#1a1a1a', accent: C.yellow,
+    },
+  ],
+  page: 0, t: 0,
+  init() { this.page = 0; this.t = 0; },
+  update(dt) {
+    this.t += dt;
+    if (consumeKey('Enter') || consumeKey('Space')) {
+      this.page++;
+      this.t = 0;
+      if (this.page >= this.pages.length) setScene(Level2Scene);
+    }
+    if (consumeKey('Escape')) setScene(LevelSelectScene);
+  },
+  draw() {
+    const p = this.pages[Math.min(this.page, this.pages.length - 1)];
+    rect(0, 0, BASE_W, BASE_H, p.bg);
+    border(4,  4,  BASE_W -  8, BASE_H -  8, p.accent);
+    border(6,  6,  BASE_W - 12, BASE_H - 12, 'rgba(255,255,255,0.1)');
+    // Page dots
+    for (let i = 0; i < this.pages.length; i++) {
+      drawStar(BASE_W/2 - (this.pages.length - 1)*8 + i*16, 18, 4,
+               i === this.page ? p.accent : C.darkGray);
+    }
+    const lineH = 18, startY = 35;
+    for (let i = 0; i < p.lines.length; i++) {
+      const alpha = Math.min(1, (this.t - i * 0.25) * 4);
+      if (alpha <= 0) continue;
+      ctx.globalAlpha = alpha;
+      drawText(p.lines[i], BASE_W/2, startY + i * lineH, p.accent, 1, 'center');
+      ctx.globalAlpha = 1;
+    }
+    if (this.t > 0.6 && Math.floor(this.t * 2) % 2) {
+      const isLast = this.page === this.pages.length - 1;
+      drawText(isLast ? 'PRESS ENTER TO SKI!' : 'PRESS ENTER TO CONTINUE',
+               BASE_W/2, BASE_H - 20, C.white, 1, 'center');
+    }
+    drawText((this.page + 1) + '/' + this.pages.length, BASE_W - 12, BASE_H - 12, C.gray, 1, 'right');
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCENE: LEVEL 2  — Chloe skis down the mountain
+// ═══════════════════════════════════════════════════════════════════════════════
+const LVL2_CHLOE_Y = 100;  // Chloe's fixed screen-Y (trees approach from below)
+const LVL2_GOAL_Y  = 5600; // total mountain height in world units
+
+const Level2Scene = {
+  // Chloe state
+  chloeX: 0, walkFrame: 0, walkTimer: 0,
+  movingLeft: false, movingRight: false,
+  health: 3, invincible: 0, hitFlash: 0,
+
+  // World scroll
+  scrollY: 0, scrollSpeed: 80,
+
+  // Game flow
+  gameStarted: false, gameElapsed: 0,
+  finished: false, finishTimer: 0, showEndPrompt: false,
+
+  // Scoring
+  score: 0, dollarScore: 0, lifeBonus: 0, finalScore: 0,
+
+  // Obstacles & collectibles
+  trees: [], dollars: [], nextTreeWY: 0,
+
+  // ── helpers ─────────────────────────────────────────────
+  collide(ax, ay, aw, ah, bx, by, bw, bh) {
+    return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+  },
+
+  placeDollars() {
+    this.dollars = [];
+    const startWY = 600, endWY = LVL2_GOAL_Y - 400;
+    const step = (endWY - startWY) / 19;
+    for (let i = 0; i < 20; i++) {
+      const wy = startWY + i * step + (Math.random() - 0.5) * step * 0.5;
+      const wx = 30 + Math.random() * (BASE_W - 60);
+      this.dollars.push({ wx, wy, collected: false });
+    }
+  },
+
+  gameOver() {
+    GameOverScene.returnScene = Level2Scene;
+    GameOverScene.line1 = 'CHLOE HIT A TREE!';
+    GameOverScene.line2 = 'THE FAMILY IS STILL STRANDED...';
+    setScene(GameOverScene);
+  },
+
+  // ── init ────────────────────────────────────────────────
+  init() {
+    this.chloeX = BASE_W / 2;
+    this.walkFrame = 0; this.walkTimer = 0;
+    this.movingLeft = false; this.movingRight = false;
+    this.health = 3; this.invincible = 0; this.hitFlash = 0;
+    this.scrollY = 0; this.scrollSpeed = 80;
+    this.gameStarted = false; this.gameElapsed = 0;
+    this.finished = false; this.finishTimer = 0; this.showEndPrompt = false;
+    this.score = 0; this.dollarScore = 0; this.lifeBonus = 0; this.finalScore = 0;
+    this.trees = [];
+    // start trees a bit below the lodge platform — first tree at world-Y 280
+    this.nextTreeWY = 280;
+    this.placeDollars();
+  },
+
+  // ── update ──────────────────────────────────────────────
+  update(dt) {
+    // ── FINISHED overlay ──────────────────────────────────
+    if (this.finished) {
+      this.finishTimer += dt;
+      if (!this.showEndPrompt && this.finishTimer > 2.5) this.showEndPrompt = true;
+      if (this.showEndPrompt) {
+        if (consumeKey('Enter') || consumeKey('Space')) {
+          if (isHighScore(this.finalScore)) {
+            InitialsScene.setScore(this.finalScore);
+            setScene(InitialsScene);
+          } else {
+            setScene(LevelSelectScene);
+          }
+        }
+        if (consumeKey('Escape')) setScene(LevelSelectScene);
+      }
+      return;
+    }
+
+    // ── Wait for first input to start scrolling ───────────
+    if (!this.gameStarted) {
+      if (keys['ArrowLeft'] || keys['KeyA'] || keys['ArrowRight'] || keys['KeyD']) {
+        this.gameStarted = true;
+      }
+    }
+
+    if (this.gameStarted) {
+      this.gameElapsed += dt;
+      // Difficulty ramp: 80 → 220 px/s over ~35 s
+      this.scrollSpeed = Math.min(220, 80 + this.gameElapsed * 4);
+      this.scrollY += this.scrollSpeed * dt;
+    }
+
+    if (this.invincible > 0) this.invincible -= dt;
+    if (this.hitFlash  > 0) this.hitFlash  -= dt;
+
+    // ── Chloe movement (left/right only) ─────────────────
+    const MOVE_SPEED = 170;
+    let dx = 0;
+    this.movingLeft  = !!(keys['ArrowLeft']  || keys['KeyA']);
+    this.movingRight = !!(keys['ArrowRight'] || keys['KeyD']);
+    if (this.movingLeft)  dx -= MOVE_SPEED * dt;
+    if (this.movingRight) dx += MOVE_SPEED * dt;
+    this.chloeX = Math.max(18, Math.min(BASE_W - 18, this.chloeX + dx));
+
+    // Walk animation
+    if (dx !== 0) {
+      this.walkTimer += dt;
+      if (this.walkTimer > 0.12) { this.walkTimer = 0; this.walkFrame = (this.walkFrame + 1) % 4; }
+    } else {
+      this.walkFrame = 0;
+    }
+
+    // ── Spawn trees ahead of Chloe ───────────────────────
+    // Trees spawn at screen bottom → screen_y = LVL2_CHLOE_Y + (wy - scrollY)
+    // Screen bottom is BASE_H, so wy_at_bottom = scrollY + (BASE_H - LVL2_CHLOE_Y)
+    const spawnAheadWY = this.scrollY + (BASE_H - LVL2_CHLOE_Y) + 30;
+    const baseSpacing = Math.max(44, 155 - this.gameElapsed * 2.2);
+    while (this.nextTreeWY < spawnAheadWY) {
+      const wx = 22 + Math.random() * (BASE_W - 44);
+      this.trees.push({ wx, wy: this.nextTreeWY });
+      this.nextTreeWY += baseSpacing + Math.random() * baseSpacing * 0.5;
+    }
+
+    // ── Collide with trees ────────────────────────────────
+    const cTop  = LVL2_CHLOE_Y - 14; // Chloe hitbox top (screen coords)
+    const cLeft = this.chloeX - 7;
+    for (const t of this.trees) {
+      const tsy = t.wy - this.scrollY + LVL2_CHLOE_Y;
+      // Only test trees near Chloe's Y band
+      if (tsy < cTop - 10 || tsy > cTop + 36) continue;
+      if (this.invincible > 0) continue;
+      if (this.collide(cLeft, cTop, 14, 22, t.wx - 11, tsy - 14, 22, 22)) {
+        this.health--;
+        this.invincible = 2.0;
+        this.hitFlash   = 0.3;
+        if (this.health <= 0) { this.gameOver(); return; }
+      }
+    }
+    // Prune trees that have scrolled well above the screen
+    this.trees = this.trees.filter(t => t.wy > this.scrollY - 80);
+
+    // ── Collect dollars ───────────────────────────────────
+    for (const d of this.dollars) {
+      if (d.collected) continue;
+      const dsy = d.wy - this.scrollY + LVL2_CHLOE_Y;
+      if (this.collide(cLeft, cTop, 14, 22, d.wx - 9, dsy - 5, 18, 10)) {
+        d.collected = true;
+        this.score      += 100;
+        this.dollarScore += 100;
+      }
+    }
+
+    // ── Check goal (reached the lodge) ───────────────────
+    if (!this.finished && this.scrollY >= LVL2_GOAL_Y) {
+      this.lifeBonus = this.health === 3 ? 500 : this.health === 2 ? 200 : 0;
+      this.score += this.lifeBonus;
+      this.finalScore = this.score;
+      this.finished = true;
+      this.finishTimer = 0;
+    }
+  },
+
+  // ── draw ────────────────────────────────────────────────
+  draw() {
+    const sy = this.scrollY;
+    const gt = performance.now() / 1000;
+
+    // ── Background: snowy slope ───────────────────────────
+    // Base sky/snow — brightens slightly as we descend toward valley
+    const prog = Math.min(1, sy / LVL2_GOAL_Y);
+    const r = Math.floor(180 + (230 - 180) * prog);
+    const g = Math.floor(210 + (245 - 210) * prog);
+    const b = Math.floor(240 + (255 - 240) * prog);
+    rect(0, 0, BASE_W, BASE_H, `rgb(${r},${g},${b})`);
+
+    // Subtle snow texture (horizontal streaks, slow parallax)
+    const lineOff = (sy * 0.25) % 40;
+    for (let ly = -lineOff; ly < BASE_H; ly += 40) {
+      ctx.fillStyle = 'rgba(180,210,240,0.12)';
+      ctx.fillRect(0, Math.floor(ly), BASE_W, 2);
+    }
+
+    // Distant mountain silhouettes on horizon (parallax ×0.04)
+    ctx.fillStyle = 'rgba(140,175,210,0.30)';
+    const mOff = (sy * 0.04) % 160;
+    for (let i = -1; i < 5; i++) {
+      const mx = i * 160 - mOff;
+      ctx.beginPath();
+      ctx.moveTo(mx,        BASE_H * 0.55);
+      ctx.lineTo(mx + 50,   BASE_H * 0.20);
+      ctx.lineTo(mx + 100,  BASE_H * 0.40);
+      ctx.lineTo(mx + 160,  BASE_H * 0.55);
+      ctx.closePath(); ctx.fill();
+    }
+
+    // ── Dollar bills ─────────────────────────────────────
+    for (const d of this.dollars) {
+      if (d.collected) continue;
+      const dsy = d.wy - sy + LVL2_CHLOE_Y;
+      if (dsy > -20 && dsy < BASE_H + 20) drawDollarBill(d.wx, dsy, gt);
+    }
+
+    // ── Trees ────────────────────────────────────────────
+    for (const t of this.trees) {
+      const tsy = t.wy - sy + LVL2_CHLOE_Y;
+      if (tsy > -38 && tsy < BASE_H + 12) drawPineTree(t.wx, tsy);
+    }
+
+    // ── Lodge (goal) ──────────────────────────────────────
+    const lodgeSY = LVL2_GOAL_Y - sy + LVL2_CHLOE_Y;
+    if (lodgeSY > -80 && lodgeSY < BASE_H + 80) {
+      drawMountainLodge(BASE_W / 2, lodgeSY);
+    }
+
+    // ── Distance-to-lodge HUD hint ────────────────────────
+    if (!this.finished && lodgeSY > BASE_H + 20) {
+      const metersLeft = Math.max(0, Math.round((LVL2_GOAL_Y - sy) / 10));
+      drawText(metersLeft + 'M TO LODGE', BASE_W / 2, 6, C.ltBlue, 1, 'center');
+    }
+
+    // ── Ski trails (aesthetic) ────────────────────────────
+    if (this.gameStarted && !this.finished) {
+      ctx.fillStyle = 'rgba(140,175,220,0.35)';
+      ctx.fillRect(Math.floor(this.chloeX) - 4, LVL2_CHLOE_Y + 14, 2, 22);
+      ctx.fillRect(Math.floor(this.chloeX) + 2, LVL2_CHLOE_Y + 14, 2, 22);
+    }
+
+    // ── Chloe (blinks while invincible) ──────────────────
+    const showChloe = this.invincible <= 0 || Math.floor(this.invincible * 10) % 2 === 0;
+    if (showChloe) drawChloe(this.chloeX, LVL2_CHLOE_Y, this.walkFrame);
+
+    // ── HUD: hearts ──────────────────────────────────────
+    for (let i = 0; i < 3; i++) drawHeart(8 + i * 14, 6, i < this.health);
+
+    // ── HUD: score ───────────────────────────────────────
+    if (this.gameStarted) {
+      drawText('$' + formatScore(this.score), BASE_W / 2, 6, C.yellow, 1, 'center');
+    } else {
+      if (Math.floor(performance.now() / 500) % 2 === 0)
+        drawText('PRESS LEFT/RIGHT TO START', BASE_W / 2, BASE_H / 2 - 6, C.yellow, 1, 'center');
+    }
+
+    // ── HUD: progress bar (right side) ───────────────────
+    const barX = BASE_W - 10, barY = 22, barH2 = BASE_H - 44;
+    rect(barX, barY, 6, barH2, 'rgba(0,0,0,0.25)');
+    const filled = Math.round(barH2 * prog);
+    rect(barX, barY + barH2 - filled, 6, filled, C.ltBlue);
+    // Marker dot
+    rect(barX - 1, barY + barH2 - filled - 2, 8, 3, C.white);
+
+    // ── Hit flash overlay ─────────────────────────────────
+    if (this.hitFlash > 0) {
+      ctx.fillStyle = `rgba(255,0,0,${(this.hitFlash / 0.3) * 0.28})`;
+      ctx.fillRect(0, 0, BASE_W, BASE_H);
+    }
+    // Damage warning above Chloe
+    if (this.invincible > 0 && this.invincible < 1.8) {
+      if (Math.floor(this.invincible * 5) % 2)
+        drawText('!', this.chloeX, LVL2_CHLOE_Y - 24, C.red, 2, 'center');
+    }
+
+    // ── Level-complete overlay ────────────────────────────
+    if (this.finished) {
+      ctx.fillStyle = 'rgba(0,0,0,0.72)';
+      ctx.fillRect(0, 0, BASE_W, BASE_H);
+      drawText('LEVEL 2 COMPLETE!', BASE_W/2, 55,  C.yellow, 2, 'center');
+      drawText('CHLOE MADE IT TO THE LODGE!', BASE_W/2, 80, C.green, 1, 'center');
+      rect(BASE_W/2 - 92, 92, 184, 1, C.gray);
+      drawText('DOLLARS:  ' + formatScore(this.dollarScore) + ' PTS',
+               BASE_W/2,  98, C.white, 1, 'center');
+      const bonusLabel = this.lifeBonus > 0 ? '+' + this.lifeBonus + ' PTS' : 'NONE';
+      const bonusColor = this.lifeBonus > 0 ? C.green : C.gray;
+      drawText('LIFE BONUS:  ' + bonusLabel, BASE_W/2, 112, bonusColor, 1, 'center');
+      rect(BASE_W/2 - 92, 124, 184, 1, C.gray);
+      drawText('TOTAL:  ' + formatScore(this.finalScore) + ' PTS',
+               BASE_W/2, 130, C.yellow, 1, 'center');
+      if (this.showEndPrompt) {
+        rect(BASE_W/2 - 102, 144, 204, 1, C.gray);
+        if (Math.floor(performance.now() / 500) % 2 === 0)
+          drawText('PRESS ENTER - HIGH SCORES', BASE_W/2, 152, C.yellow, 1, 'center');
+        drawText('PRESS ESC - LEVEL SELECT',  BASE_W/2, 166, C.gray,   1, 'center');
+      }
+    }
+  },
+};
+
 // ── SCORE FORMATTER ───────────────────────────────────────────────────────────
 function formatScore(pts) {
   return pts.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
@@ -1852,6 +2372,20 @@ function gameLoop(now) {
     scene.health      = 3;
     scene.score       = 900;
     scene.dollarScore = 900;
+  }
+  // ── QUICK SAVE STATE: Numpad2 → Level 2 near the lodge ──
+  if (consumeKey('Numpad2')) {
+    setScene(Level2Scene);               // calls init() + placeDollars()
+    scene.scrollY     = LVL2_GOAL_Y - 800;
+    scene.scrollSpeed = 150;
+    scene.gameStarted = true;
+    scene.gameElapsed = 20;
+    scene.health      = 3;
+    scene.score       = 1200;
+    scene.dollarScore = 1200;
+    scene.chloeX      = BASE_W / 2;
+    // Mark all but last 3 dollars collected so they show near-lodge
+    for (let i = 0; i < scene.dollars.length - 3; i++) scene.dollars[i].collected = true;
   }
 
   // Clear justPressed each frame after update
