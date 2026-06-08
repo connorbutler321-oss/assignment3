@@ -853,10 +853,10 @@ const Level1Scene = {
   finished: false,
   finishTimer: 0,
 
-  // Spawn
-  nextGroundCar: 300,
-  nextFlyingCar: 500,
-  spawnCooldown: 0,
+  // Spawn (time-based)
+  gameStarted: false,
+  gameElapsed: 0,
+  nextCarSpawnTime: 0,
 
   // Background parallax
   cloudX: [],
@@ -866,9 +866,14 @@ const Level1Scene = {
   hitFlash: 0,
 
   init() {
-    this.px = 60; this.py = 0;
+    // groundY must be set first so px/py can reference it
+    this.groundY = BASE_H - 50;
+
+    // Start Connor on the ground just to the right of the family car (world x≈84)
+    this.px = 100;
+    this.py = this.groundY - 20; // feet on ground immediately, no falling
     this.pvx = 0; this.pvy = 0;
-    this.onGround = false;
+    this.onGround = true;
     this.facingRight = true;
     this.health = 3;
     this.invincible = 0;
@@ -879,33 +884,22 @@ const Level1Scene = {
     this.groundCars = [];
     this.flyingCars = [];
     this.reachedStation = false;
-    this.startTime = performance.now();
+    this.startTime = 0;  // set when player first moves
     this.elapsed = 0;
     this.finished = false;
     this.finishTimer = 0;
-    this.nextGroundCar = 3300;
-    this.nextFlyingCar = 3450;
-    this.spawnCooldown = 0;
+    this.gameStarted = false;
+    this.gameElapsed = 0;
+    this.nextCarSpawnTime = 2.0; // first car 2 s after player starts moving
     this.hitFlash = 0;
     this.cloudX = [];
     this.bgTreeX = [];
-
-    this.groundY = BASE_H - 50;
 
     // Clouds
     for (let i=0; i<8; i++) {
       this.cloudX.push({ x: 100 + i*550, y: 20 + Math.random()*40, w: 40+Math.random()*30, speed: 0.2+Math.random()*0.1 });
     }
-
-    // Pre-spawn obstacles — alternating ground/flying with 350-500px gaps.
-    // Flying cars are head-height: run under them (jumping gets you hit).
-    this.spawnGroundCar(400);
-    this.spawnGroundCar(850);
-    this.spawnFlyingCar(1250);
-    this.spawnGroundCar(1750);
-    this.spawnFlyingCar(2100);
-    this.spawnGroundCar(2600);
-    this.spawnFlyingCar(2950);
+    // No pre-spawned cars — time-based spawner handles everything
   },
 
   spawnGroundCar(wx) {
@@ -946,7 +940,21 @@ const Level1Scene = {
       return;
     }
 
-    this.elapsed = (performance.now() - this.startTime) / 1000;
+    // Detect first input and start the clock
+    if (!this.gameStarted) {
+      const anyKey = keys['ArrowRight'] || keys['KeyD'] || keys['ArrowLeft'] || keys['KeyA'] ||
+                     keys['Space'] || keys['ArrowUp'] || keys['KeyW'];
+      if (anyKey) {
+        this.gameStarted = true;
+        this.startTime = performance.now();
+      }
+    }
+
+    if (this.gameStarted) {
+      this.elapsed = (performance.now() - this.startTime) / 1000;
+      this.gameElapsed += dt;
+    }
+
     this.hitFlash = Math.max(0, this.hitFlash - dt);
     this.invincible = Math.max(0, this.invincible - dt);
 
@@ -999,15 +1007,17 @@ const Level1Scene = {
     this.scrollX += (targetScroll - this.scrollX) * Math.min(1, dt*8);
     this.scrollX = Math.max(0, Math.min(this.worldWidth - BASE_W, this.scrollX));
 
-    // ── SPAWN OBSTACLES ──
-    const spawnAhead = this.scrollX + BASE_W + 100;
-    if (spawnAhead > this.nextGroundCar && this.nextGroundCar < this.gasStationX - 300) {
-      this.spawnGroundCar(this.nextGroundCar);
-      this.nextGroundCar += 350 + Math.random()*200;
-    }
-    if (spawnAhead > this.nextFlyingCar && this.nextFlyingCar < this.gasStationX - 200) {
-      this.spawnFlyingCar(this.nextFlyingCar);
-      this.nextFlyingCar += 380 + Math.random()*170;
+    // ── SPAWN OBSTACLES (one car every 1-3 s, only after player moves) ──
+    if (this.gameStarted && this.gameElapsed >= this.nextCarSpawnTime) {
+      const spawnX = Math.floor(this.scrollX + BASE_W + 80);
+      if (spawnX < this.gasStationX - 200) {
+        if (Math.random() < 0.3) {
+          this.spawnFlyingCar(spawnX);
+        } else {
+          this.spawnGroundCar(spawnX);
+        }
+      }
+      this.nextCarSpawnTime = this.gameElapsed + 1 + Math.random() * 2; // next car in 1-3 s
     }
 
     // ── UPDATE GROUND CARS ──
@@ -1158,8 +1168,16 @@ const Level1Scene = {
     }
 
     // ── HUD ──
-    // Timer
-    drawText(formatTime(Math.round(this.elapsed*1000)), BASE_W/2, 6, C.white, 1, 'center');
+    // Timer (only show once game has started)
+    if (this.gameStarted) {
+      drawText(formatTime(Math.round(this.elapsed*1000)), BASE_W/2, 6, C.white, 1, 'center');
+    } else {
+      // Waiting-to-start prompt
+      if (Math.floor(performance.now() / 500) % 2 === 0) {
+        drawText('PRESS ANY KEY TO START', BASE_W/2, BASE_H/2 - 20, C.yellow, 1, 'center');
+      }
+      drawText('ARROW KEYS TO MOVE  SPACE TO JUMP', BASE_W/2, BASE_H/2 - 8, C.white, 1, 'center');
+    }
 
     // Health hearts
     for (let i=0; i<3; i++) {
