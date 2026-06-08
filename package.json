@@ -1,0 +1,7 @@
+{
+  "name": "american-weekend-vacation",
+  "private": true,
+  "dependencies": {
+    "@vercel/kv": "^3.0.0"
+  }
+}

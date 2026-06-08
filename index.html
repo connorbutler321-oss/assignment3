@@ -72,24 +72,57 @@ function consumeKey(code) {
   return false;
 }
 
-// ── HIGHSCORES ────────────────────────────────────────────────────────────────
-const HS_KEY = 'awv_highscores_v2';
+// ── HIGHSCORES (global leaderboard via /api/scores, localStorage fallback) ────
+const HS_LOCAL_KEY = 'awv_highscores_v2';
+let _cachedScores = null; // populated from server on startup and on demand
+
+// Synchronous — returns best available scores for draws / isHighScore checks
 function loadScores() {
-  try { return JSON.parse(localStorage.getItem(HS_KEY)) || []; } catch { return []; }
+  if (_cachedScores) return _cachedScores;
+  try { return JSON.parse(localStorage.getItem(HS_LOCAL_KEY)) || []; } catch { return []; }
 }
-function saveScores(arr) { localStorage.setItem(HS_KEY, JSON.stringify(arr)); }
-function addScore(initials, points) {
-  const scores = loadScores();
-  scores.push({ initials: initials.toUpperCase().slice(0,3), score: points });
-  scores.sort((a,b) => b.score - a.score); // highest first
-  scores.splice(10);
-  saveScores(scores);
-  return scores;
+
+function _persistLocal(arr) {
+  try { localStorage.setItem(HS_LOCAL_KEY, JSON.stringify(arr)); } catch {}
 }
+
+// Fetch the live top-10 from the server and refresh the cache
+async function refreshScores() {
+  try {
+    const r = await fetch('/api/scores');
+    if (!r.ok) throw new Error(r.status);
+    _cachedScores = await r.json();
+    _persistLocal(_cachedScores);
+  } catch {
+    _cachedScores = loadScores(); // fall back to local copy
+  }
+}
+
+// Submit a new score to the server; keeps local cache in sync
+async function addScore(initials, points) {
+  try {
+    const r = await fetch('/api/scores', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initials, score: points }),
+    });
+    if (!r.ok) throw new Error(r.status);
+    _cachedScores = await r.json();
+    _persistLocal(_cachedScores);
+  } catch {
+    // Offline / local-only fallback
+    const arr = loadScores();
+    arr.push({ initials: initials.toUpperCase().slice(0, 3), score: points });
+    arr.sort((a, b) => b.score - a.score);
+    arr.splice(10);
+    _persistLocal(arr);
+    _cachedScores = arr;
+  }
+}
+
 function isHighScore(points) {
-  const scores = loadScores();
-  if (scores.length < 10) return true;
-  return points > scores[scores.length - 1].score;
+  const arr = loadScores();
+  return arr.length < 10 || points > arr[arr.length - 1].score;
 }
 
 // ── SCENE MANAGER ─────────────────────────────────────────────────────────────
@@ -723,7 +756,12 @@ const LevelSelectScene = {
 // ═══════════════════════════════════════════════════════════════════════════════
 const HighScoreScene = {
   t: 0,
-  init() { this.t = 0; },
+  loading: false,
+  init() {
+    this.t = 0;
+    this.loading = true;
+    refreshScores().then(() => { this.loading = false; });
+  },
   update(dt) {
     this.t += dt;
     if (consumeKey('Escape') || consumeKey('Enter')) setScene(LevelSelectScene);
@@ -751,7 +789,10 @@ const HighScoreScene = {
     drawText('SCORE', colScore, 55, C.gray, 1, 'right');
     rect(20, 64, BASE_W-40, 1, C.gray);
 
-    if (scores.length === 0) {
+    if (this.loading) {
+      if (Math.floor(this.t * 4) % 2 === 0)
+        drawText('LOADING...', BASE_W/2, 130, C.gray, 1, 'center');
+    } else if (scores.length === 0) {
       drawText('NO SCORES YET!', BASE_W/2, 120, C.gray, 2, 'center');
       drawText('COLLECT DOLLARS TO SCORE POINTS!', BASE_W/2, 145, C.gray, 1, 'center');
     } else {
@@ -1865,6 +1906,7 @@ function gameLoop(now) {
 }
 
 setScene(TitleScene);
+refreshScores(); // pre-load global leaderboard so isHighScore() is accurate
 requestAnimationFrame(gameLoop);
 </script>
 </body>
