@@ -1311,6 +1311,13 @@ const Level1Scene = {
       return;
     }
 
+    // Pause
+    if (consumeKey('Escape')) {
+      PauseScene.fromScene = Level1Scene;
+      setScene(PauseScene);
+      return;
+    }
+
     // Detect first input and start the clock
     if (!this.gameStarted) {
       const anyKey = keys['ArrowRight'] || keys['KeyD'] || keys['ArrowLeft'] || keys['KeyA'] ||
@@ -1667,6 +1674,40 @@ const GameOverScene = {
       drawHeart(BASE_W/2 - 21 + i*14, 150, false);
     }
   }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCENE: PAUSE
+// ═══════════════════════════════════════════════════════════════════════════════
+const PauseScene = {
+  fromScene: null,
+  sel: 0, // 0 = RESUME, 1 = HOME
+  init() { this.sel = 0; },
+  resume() { scene = this.fromScene; }, // restore without calling init()
+  update(dt) {
+    if (consumeKey('ArrowUp'))   this.sel = 0;
+    if (consumeKey('ArrowDown')) this.sel = 1;
+    if (consumeKey('Escape')) { this.resume(); return; }
+    if (consumeKey('Enter') || consumeKey('Space')) {
+      if (this.sel === 0) this.resume();
+      else setScene(LevelSelectScene);
+    }
+  },
+  draw() {
+    if (this.fromScene) this.fromScene.draw();
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 0, BASE_W, BASE_H);
+    const pw = 160, ph = 86;
+    const px = BASE_W/2 - pw/2, py = BASE_H/2 - ph/2;
+    rect(px, py, pw, ph, '#000022');
+    border(px, py, pw, ph, C.yellow);
+    drawText('PAUSED', BASE_W/2, py + 13, C.yellow, 2, 'center');
+    const resumeC = this.sel === 0 ? C.white : C.gray;
+    const homeC   = this.sel === 1 ? C.white : C.gray;
+    drawText((this.sel === 0 ? '> ' : '  ') + 'RESUME',      BASE_W/2, py + 43, resumeC, 1, 'center');
+    drawText((this.sel === 1 ? '> ' : '  ') + 'RETURN HOME', BASE_W/2, py + 57, homeC,   1, 'center');
+    drawText('ESC - RESUME', BASE_W/2, py + ph + 7, C.darkGray, 1, 'center');
+  },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2270,6 +2311,13 @@ const Level2Scene = {
         }
         if (consumeKey('Escape')) setScene(LevelSelectScene);
       }
+      return;
+    }
+
+    // Pause
+    if (consumeKey('Escape')) {
+      PauseScene.fromScene = Level2Scene;
+      setScene(PauseScene);
       return;
     }
 
