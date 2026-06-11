@@ -72,6 +72,18 @@ function consumeKey(code) {
   return false;
 }
 
+// Click-to-select tabs on the high score screen
+canvas.addEventListener('click', e => {
+  if (scene !== HighScoreScene) return;
+  const r  = canvas.getBoundingClientRect();
+  const gx = (e.clientX - r.left) * (BASE_W / r.width);
+  const gy = (e.clientY - r.top)  * (BASE_H / r.height);
+  if (gy >= 32 && gy <= 50) {
+    if (gx >= 18  && gx <= 122) HighScoreScene.viewLevel = 'level1';
+    if (gx >= 358 && gx <= 462) HighScoreScene.viewLevel = 'level2';
+  }
+});
+
 // ── HIGHSCORES (per-level leaderboard via /api/scores, localStorage fallback) ─
 const HS_LOCAL_KEY = 'awv_highscores_v3';
 const _cachedScores = { level1: null, level2: null };
@@ -899,9 +911,8 @@ const HighScoreScene = {
   },
   update(dt) {
     this.t += dt;
-    if (consumeKey('Tab') || consumeKey('KeyL')) {
-      this.viewLevel = this.viewLevel === 'level1' ? 'level2' : 'level1';
-    }
+    if (consumeKey('ArrowLeft'))  this.viewLevel = 'level1';
+    if (consumeKey('ArrowRight')) this.viewLevel = 'level2';
     if (consumeKey('Escape') || consumeKey('Enter')) setScene(LevelSelectScene);
   },
   draw() {
@@ -917,26 +928,27 @@ const HighScoreScene = {
 
     drawText('HIGH SCORES', BASE_W/2, 16, C.yellow, 2, 'center');
 
-    // Level tabs
+    // Level tabs — click or use arrow keys to switch
     const tab1Active = this.viewLevel === 'level1';
-    const tab1Color  = tab1Active ? C.green  : C.darkGray;
+    const tab1Color  = tab1Active ? C.green   : C.darkGray;
     const tab2Color  = tab1Active ? C.darkGray : C.ltBlue;
-    const tabY = 34;
-    rect(20,          tabY, 100, 12, tab1Active ? 'rgba(51,170,68,0.25)'  : 'rgba(0,0,0,0.3)');
-    rect(BASE_W-120,  tabY, 100, 12, tab1Active ? 'rgba(0,0,0,0.3)' : 'rgba(170,221,255,0.25)');
-    border(20,         tabY, 100, 12, tab1Color);
-    border(BASE_W-120, tabY, 100, 12, tab2Color);
-    drawText('LEVEL 1', 70,         tabY + 3, tab1Color, 1, 'center');
-    drawText('LEVEL 2', BASE_W - 70, tabY + 3, tab2Color, 1, 'center');
-    if (Math.floor(this.t * 3) % 2 === 0)
-      drawText('TAB TO SWITCH', BASE_W/2, tabY + 3, C.darkGray, 1, 'center');
+    const tabY = 32, tabH = 18;
+    rect(18,          tabY, 104, tabH, tab1Active ? 'rgba(51,170,68,0.25)'   : 'rgba(0,0,0,0.3)');
+    rect(BASE_W-122,  tabY, 104, tabH, tab1Active ? 'rgba(0,0,0,0.3)' : 'rgba(170,221,255,0.25)');
+    border(18,          tabY, 104, tabH, tab1Color);
+    border(BASE_W-122,  tabY, 104, tabH, tab2Color);
+    drawText('LEVEL 1', 70,          tabY + 6, tab1Color, 1, 'center');
+    drawText('LEVEL 2', BASE_W - 70, tabY + 6, tab2Color, 1, 'center');
+    // Arrow hints pointing toward the inactive tab
+    if (!tab1Active) drawText('>', 22, tabY + 6, C.darkGray, 1);
+    if ( tab1Active) drawText('>', BASE_W - 22, tabY + 6, C.darkGray, 1, 'right');
 
     const subLabel = this.viewLevel === 'level1' ? 'HIGHWAY TO GAS' : 'SKI TO THE LODGE';
     const subColor = this.viewLevel === 'level1' ? C.green : C.ltBlue;
 
     const scores   = loadScores(this.viewLevel);
     const colRank  = 30, colInit = 75, colScore = BASE_W - 30;
-    const tableTop = 52;
+    const tableTop = 56;
 
     rect(20, tableTop,     BASE_W-40, 1, C.gray);
     drawText('RANK',  colRank,  tableTop + 5, C.gray, 1);
