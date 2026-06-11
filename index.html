@@ -8,10 +8,57 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
   canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+  #loginOverlay {
+    position: fixed; inset: 0; background: #000011;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    z-index: 100; font-family: 'Courier New', monospace; gap: 0;
+  }
+  #loginOverlay h1 {
+    color: #FFDD00; font-size: clamp(13px, 3vw, 22px);
+    letter-spacing: 0.3em; margin-bottom: 6px; text-align: center; font-weight: normal;
+  }
+  #loginOverlay p {
+    color: #888; font-size: clamp(9px, 1.8vw, 11px);
+    letter-spacing: 0.2em; margin-bottom: 28px; text-align: center;
+  }
+  #emailInput {
+    background: #000033; color: #FFDD00; border: 2px solid #FFDD00;
+    padding: 10px 20px; font-size: clamp(12px, 2vw, 15px);
+    font-family: 'Courier New', monospace; letter-spacing: 0.1em;
+    outline: none; width: min(320px, 80vw); text-align: center;
+  }
+  #emailInput:focus { border-color: #fff; }
+  #emailError { color: #DD2222; font-size: 11px; margin-top: 8px; height: 16px; letter-spacing: 0.1em; }
+  #playBtn {
+    margin-top: 14px; background: #33AA44; color: #000; border: none;
+    padding: 12px 44px; font-size: clamp(12px, 2vw, 14px);
+    font-family: 'Courier New', monospace; letter-spacing: 0.3em;
+    cursor: pointer; font-weight: bold;
+  }
+  #playBtn:hover:not(:disabled) { background: #44cc55; }
+  #playBtn:disabled { background: #336633; cursor: default; }
+  #playerCounter {
+    position: fixed; bottom: 0; left: 0; right: 0; text-align: center;
+    color: #444; font-family: 'Courier New', monospace; font-size: 11px;
+    padding: 5px; background: #000; letter-spacing: 0.1em; z-index: 50;
+  }
 </style>
 </head>
 <body>
 <canvas id="gameCanvas"></canvas>
+
+<!-- Email login overlay — shown before the game starts -->
+<div id="loginOverlay">
+  <h1>AMERICAN WEEKEND VACATION</h1>
+  <p>ENTER YOUR EMAIL TO PLAY</p>
+  <input id="emailInput" type="email" autocomplete="email" placeholder="your@email.com">
+  <div id="emailError"></div>
+  <button id="playBtn">PLAY</button>
+</div>
+
+<!-- Player count footer -->
+<div id="playerCounter"><span id="playerCountText">...</span></div>
+
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -127,6 +174,22 @@ async function addScore(initials, points, level = 'level1') {
 function isHighScore(points, level = 'level1') {
   const arr = loadScores(level);
   return arr.length < 10 || points > arr[arr.length - 1].score;
+}
+
+// ── CURRENT USER ─────────────────────────────────────────────────────────────
+// Set by the email login overlay; null until the player signs in.
+let currentUser = null; // { email: string, levelsUnlocked: number }
+
+// Call when a player completes a level — unlocks the next one locally and syncs to DB.
+function unlockLevel(n) {
+  if (!currentUser || currentUser.levelsUnlocked >= n) return;
+  currentUser.levelsUnlocked = n;
+  try { localStorage.setItem('awv_progress_' + currentUser.email, String(n)); } catch {}
+  fetch('/api/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: currentUser.email, unlock: n }),
+  }).catch(() => {});
 }
 
 // ── SCENE MANAGER ─────────────────────────────────────────────────────────────
@@ -818,23 +881,29 @@ const LevelSelectScene = {
   selected: 0,
   t: 0,
   levels: [
-    { name: 'LEVEL 1', sub: 'HIGHWAY TO GAS',  locked: false, color: C.green  },
-    { name: 'LEVEL 2', sub: 'SKI TO THE LODGE', locked: false, color: C.ltBlue },
-    { name: 'LEVEL 3', sub: 'COMING SOON',      locked: true,  color: C.darkGray },
+    { name: 'LEVEL 1', sub: 'HIGHWAY TO GAS',   color: C.green    },
+    { name: 'LEVEL 2', sub: 'SKI TO THE LODGE',  color: C.ltBlue   },
+    { name: 'LEVEL 3', sub: 'COMING SOON',        color: C.darkGray },
   ],
+  // Level 1 always unlocked; Level 2 requires beating Level 1 (per user); Level 3 always locked.
+  isLocked(i) {
+    if (i === 2) return true;
+    if (i === 1) return !currentUser || currentUser.levelsUnlocked < 2;
+    return false;
+  },
   init() { this.selected = 0; this.t = 0; },
   update(dt) {
     this.t += dt;
     if (consumeKey('ArrowUp') || consumeKey('ArrowLeft')) {
       do { this.selected = (this.selected - 1 + this.levels.length) % this.levels.length; }
-      while (this.levels[this.selected].locked && this.selected !== 0);
+      while (this.isLocked(this.selected) && this.selected !== 0);
     }
     if (consumeKey('ArrowDown') || consumeKey('ArrowRight')) {
       do { this.selected = (this.selected + 1) % this.levels.length; }
-      while (this.levels[this.selected].locked);
+      while (this.isLocked(this.selected));
     }
     if (consumeKey('Enter') || consumeKey('Space')) {
-      if (!this.levels[this.selected].locked) {
+      if (!this.isLocked(this.selected)) {
         if      (this.selected === 0) setScene(Level1Scene);
         else if (this.selected === 1) setScene(Level2StoryScene);
       }
@@ -844,7 +913,6 @@ const LevelSelectScene = {
   },
   draw() {
     rect(0, 0, BASE_W, BASE_H, '#0d1b2a');
-    // Background road stripes
     for (let i=0; i<BASE_W; i+=40) {
       rect((i + this.t*20) % (BASE_W+40) - 20, BASE_H-30, 20, 4, 'rgba(255,255,0,0.1)');
     }
@@ -854,29 +922,26 @@ const LevelSelectScene = {
 
     for (let i=0; i<this.levels.length; i++) {
       const lv = this.levels[i];
+      const locked = this.isLocked(i);
       const bx = BASE_W/2 - 90;
       const by = 55 + i*60;
       const bw = 180, bh = 48;
       const isSelected = i === this.selected;
 
-      // Card
       const cardColor = isSelected ? lv.color : 'rgba(30,30,50,0.9)';
       rect(bx, by, bw, bh, cardColor);
       border(bx, by, bw, bh, isSelected ? C.white : lv.color);
       if (isSelected) border(bx+2, by+2, bw-4, bh-4, 'rgba(255,255,255,0.3)');
 
-      if (lv.locked) {
+      if (locked) {
         drawText('LOCKED', BASE_W/2, by+14, C.gray, 2, 'center');
         drawText(lv.sub, BASE_W/2, by+32, C.darkGray, 1, 'center');
-        // Lock icon
         rect(BASE_W/2-3, by+15, 6, 5, C.gray);
-        rect(BASE_W/2-2, by+12, 4, 4, 'rgba(0,0,0,0)');
-        ctx.strokeStyle = C.gray; ctx.lineWidth=1;
+        ctx.strokeStyle = C.gray; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.arc(BASE_W/2, by+15, 3, Math.PI, 0); ctx.stroke();
       } else {
         drawText(lv.name, BASE_W/2, by+10, isSelected ? C.white : lv.color, 2, 'center');
-        drawText(lv.sub, BASE_W/2, by+30, isSelected ? C.cream : C.gray, 1, 'center');
-        // Best score for this specific level
+        drawText(lv.sub,  BASE_W/2, by+30, isSelected ? C.cream  : C.gray,  1, 'center');
         const lvlKey = i === 0 ? 'level1' : i === 1 ? 'level2' : null;
         const scores = lvlKey ? loadScores(lvlKey) : [];
         if (scores.length > 0) {
@@ -886,9 +951,8 @@ const LevelSelectScene = {
     }
 
     drawText('H - HIGHSCORES', BASE_W/2, BASE_H-28, C.gray, 1, 'center');
-    drawText('ESC - TITLE', BASE_W/2, BASE_H-18, C.gray, 1, 'center');
+    drawText('ESC - TITLE',    BASE_W/2, BASE_H-18, C.gray, 1, 'center');
 
-    // Arrow indicators
     if (Math.floor(this.t*2)%2) {
       drawText('>', bx=BASE_W/2 - 98, 55+this.selected*60+16, C.white, 2);
     }
@@ -1247,6 +1311,13 @@ const Level1Scene = {
       return;
     }
 
+    // Pause
+    if (consumeKey('Escape')) {
+      PauseScene.fromScene = Level1Scene;
+      setScene(PauseScene);
+      return;
+    }
+
     // Detect first input and start the clock
     if (!this.gameStarted) {
       const anyKey = keys['ArrowRight'] || keys['KeyD'] || keys['ArrowLeft'] || keys['KeyA'] ||
@@ -1382,6 +1453,7 @@ const Level1Scene = {
       this.lifeBonus = this.health === 3 ? 500 : this.health === 2 ? 200 : 0;
       this.score += this.lifeBonus;
       this.finalScore = this.score;
+      unlockLevel(2); // Level 1 complete — unlock Level 2 for this player
       // Clear all obstacles so Connor runs back safely
       this.groundCars = [];
       this.flyingCars = [];
@@ -1602,6 +1674,40 @@ const GameOverScene = {
       drawHeart(BASE_W/2 - 21 + i*14, 150, false);
     }
   }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCENE: PAUSE
+// ═══════════════════════════════════════════════════════════════════════════════
+const PauseScene = {
+  fromScene: null,
+  sel: 0, // 0 = RESUME, 1 = HOME
+  init() { this.sel = 0; },
+  resume() { scene = this.fromScene; }, // restore without calling init()
+  update(dt) {
+    if (consumeKey('ArrowUp'))   this.sel = 0;
+    if (consumeKey('ArrowDown')) this.sel = 1;
+    if (consumeKey('Escape')) { this.resume(); return; }
+    if (consumeKey('Enter') || consumeKey('Space')) {
+      if (this.sel === 0) this.resume();
+      else setScene(LevelSelectScene);
+    }
+  },
+  draw() {
+    if (this.fromScene) this.fromScene.draw();
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 0, BASE_W, BASE_H);
+    const pw = 160, ph = 86;
+    const px = BASE_W/2 - pw/2, py = BASE_H/2 - ph/2;
+    rect(px, py, pw, ph, '#000022');
+    border(px, py, pw, ph, C.yellow);
+    drawText('PAUSED', BASE_W/2, py + 13, C.yellow, 2, 'center');
+    const resumeC = this.sel === 0 ? C.white : C.gray;
+    const homeC   = this.sel === 1 ? C.white : C.gray;
+    drawText((this.sel === 0 ? '> ' : '  ') + 'RESUME',      BASE_W/2, py + 43, resumeC, 1, 'center');
+    drawText((this.sel === 1 ? '> ' : '  ') + 'RETURN HOME', BASE_W/2, py + 57, homeC,   1, 'center');
+    drawText('ESC - RESUME', BASE_W/2, py + ph + 7, C.darkGray, 1, 'center');
+  },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2208,6 +2314,13 @@ const Level2Scene = {
       return;
     }
 
+    // Pause
+    if (consumeKey('Escape')) {
+      PauseScene.fromScene = Level2Scene;
+      setScene(PauseScene);
+      return;
+    }
+
     // ── Wait for first input to start scrolling ───────────
     if (!this.gameStarted) {
       if (keys['ArrowLeft'] || keys['KeyA'] || keys['ArrowRight'] || keys['KeyD']) {
@@ -2474,6 +2587,72 @@ setScene(TitleScene);
 refreshScores('level1'); // pre-load both leaderboards so isHighScore() is accurate
 refreshScores('level2');
 requestAnimationFrame(gameLoop);
+
+// ── EMAIL LOGIN + PLAYER COUNTER ──────────────────────────────────────────────
+(function () {
+  const overlay      = document.getElementById('loginOverlay');
+  const emailInput   = document.getElementById('emailInput');
+  const playBtn      = document.getElementById('playBtn');
+  const errorEl      = document.getElementById('emailError');
+  const counterText  = document.getElementById('playerCountText');
+
+  // Fetch and display the unique player count
+  function fetchCount() {
+    fetch('/api/users')
+      .then(r => r.json())
+      .then(d => {
+        const n = d.count || 0;
+        counterText.textContent = n.toLocaleString() + ' player' + (n !== 1 ? 's' : '') + ' worldwide';
+      })
+      .catch(() => { counterText.textContent = ''; });
+  }
+  fetchCount();
+
+  // Pre-fill email from last session
+  try {
+    const saved = localStorage.getItem('awv_email');
+    if (saved) emailInput.value = saved;
+  } catch {}
+
+  function submitEmail() {
+    const email = emailInput.value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errorEl.textContent = 'PLEASE ENTER A VALID EMAIL ADDRESS';
+      return;
+    }
+    playBtn.disabled = true;
+    playBtn.textContent = 'LOADING...';
+    errorEl.textContent = '';
+
+    fetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    })
+      .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(data => {
+        currentUser = { email: data.email, levelsUnlocked: data.levelsUnlocked };
+        try {
+          localStorage.setItem('awv_email', data.email);
+          localStorage.setItem('awv_progress_' + data.email, String(data.levelsUnlocked));
+        } catch {}
+        overlay.style.display = 'none';
+        fetchCount(); // refresh counter (new user may have been added)
+      })
+      .catch(() => {
+        // Offline / API-down fallback — use locally cached progress
+        const clean = email.toLowerCase();
+        let progress = 1;
+        try { progress = parseInt(localStorage.getItem('awv_progress_' + clean) || '1'); } catch {}
+        currentUser = { email: clean, levelsUnlocked: progress };
+        try { localStorage.setItem('awv_email', clean); } catch {}
+        overlay.style.display = 'none';
+      });
+  }
+
+  playBtn.addEventListener('click', submitEmail);
+  emailInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitEmail(); });
+})();
 </script>
 </body>
 </html>
