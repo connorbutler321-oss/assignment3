@@ -72,56 +72,48 @@ function consumeKey(code) {
   return false;
 }
 
-// ── HIGHSCORES (global leaderboard via /api/scores, localStorage fallback) ────
-const HS_LOCAL_KEY = 'awv_highscores_v2';
-let _cachedScores = null; // populated from server on startup and on demand
+// ── HIGHSCORES (per-level leaderboard via /api/scores, localStorage fallback) ─
+const HS_LOCAL_KEY = 'awv_highscores_v3';
+const _cachedScores = { level1: null, level2: null };
 
-// Synchronous — returns best available scores for draws / isHighScore checks
-function loadScores() {
-  if (_cachedScores) return _cachedScores;
-  try { return JSON.parse(localStorage.getItem(HS_LOCAL_KEY)) || []; } catch { return []; }
+function loadScores(level = 'level1') {
+  if (_cachedScores[level]) return _cachedScores[level];
+  try { return JSON.parse(localStorage.getItem(HS_LOCAL_KEY + '_' + level)) || []; } catch { return []; }
 }
-
-function _persistLocal(arr) {
-  try { localStorage.setItem(HS_LOCAL_KEY, JSON.stringify(arr)); } catch {}
+function _persistLocal(arr, level) {
+  try { localStorage.setItem(HS_LOCAL_KEY + '_' + level, JSON.stringify(arr)); } catch {}
 }
-
-// Fetch the live top-10 from the server and refresh the cache
-async function refreshScores() {
+async function refreshScores(level = 'level1') {
   try {
-    const r = await fetch('/api/scores');
+    const r = await fetch('/api/scores?level=' + level);
     if (!r.ok) throw new Error(r.status);
-    _cachedScores = await r.json();
-    _persistLocal(_cachedScores);
+    _cachedScores[level] = await r.json();
+    _persistLocal(_cachedScores[level], level);
   } catch {
-    _cachedScores = loadScores(); // fall back to local copy
+    _cachedScores[level] = loadScores(level);
   }
 }
-
-// Submit a new score to the server; keeps local cache in sync
-async function addScore(initials, points) {
+async function addScore(initials, points, level = 'level1') {
   try {
     const r = await fetch('/api/scores', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ initials, score: points }),
+      body: JSON.stringify({ initials, score: points, level }),
     });
     if (!r.ok) throw new Error(r.status);
-    _cachedScores = await r.json();
-    _persistLocal(_cachedScores);
+    _cachedScores[level] = await r.json();
+    _persistLocal(_cachedScores[level], level);
   } catch {
-    // Offline / local-only fallback
-    const arr = loadScores();
+    const arr = loadScores(level);
     arr.push({ initials: initials.toUpperCase().slice(0, 3), score: points });
     arr.sort((a, b) => b.score - a.score);
     arr.splice(10);
-    _persistLocal(arr);
-    _cachedScores = arr;
+    _persistLocal(arr, level);
+    _cachedScores[level] = arr;
   }
 }
-
-function isHighScore(points) {
-  const arr = loadScores();
+function isHighScore(points, level = 'level1') {
+  const arr = loadScores(level);
   return arr.length < 10 || points > arr[arr.length - 1].score;
 }
 
@@ -872,8 +864,9 @@ const LevelSelectScene = {
       } else {
         drawText(lv.name, BASE_W/2, by+10, isSelected ? C.white : lv.color, 2, 'center');
         drawText(lv.sub, BASE_W/2, by+30, isSelected ? C.cream : C.gray, 1, 'center');
-        // Best score
-        const scores = loadScores();
+        // Best score for this specific level
+        const lvlKey = i === 0 ? 'level1' : i === 1 ? 'level2' : null;
+        const scores = lvlKey ? loadScores(lvlKey) : [];
         if (scores.length > 0) {
           drawText('BEST: ' + formatScore(scores[0].score) + ' PTS', BASE_W/2, by+40, isSelected ? C.yellow : C.gray, 1, 'center');
         }
@@ -896,62 +889,85 @@ const LevelSelectScene = {
 const HighScoreScene = {
   t: 0,
   loading: false,
+  viewLevel: 'level1', // set by callers before setScene(); persists for tab switching
   init() {
     this.t = 0;
     this.loading = true;
-    refreshScores().then(() => { this.loading = false; });
+    // Refresh both boards so switching tabs is instant
+    Promise.all([refreshScores('level1'), refreshScores('level2')])
+      .then(() => { this.loading = false; });
   },
   update(dt) {
     this.t += dt;
+    if (consumeKey('Tab') || consumeKey('KeyL')) {
+      this.viewLevel = this.viewLevel === 'level1' ? 'level2' : 'level1';
+    }
     if (consumeKey('Escape') || consumeKey('Enter')) setScene(LevelSelectScene);
   },
   draw() {
     rect(0, 0, BASE_W, BASE_H, '#0a0a1a');
 
-    // Animated top strip
-    rect(0, 0, BASE_W, 3, C.red);
-    rect(0, 3, BASE_W, 3, C.white);
-    rect(0, 6, BASE_W, 3, C.blue);
+    // Animated flag strips
+    rect(0, 0,        BASE_W, 3, C.red);
+    rect(0, 3,        BASE_W, 3, C.white);
+    rect(0, 6,        BASE_W, 3, C.blue);
     rect(0, BASE_H-9, BASE_W, 3, C.blue);
     rect(0, BASE_H-6, BASE_W, 3, C.white);
     rect(0, BASE_H-3, BASE_W, 3, C.red);
 
-    drawText('HIGH SCORES', BASE_W/2, 20, C.yellow, 2, 'center');
-    drawText('LEVEL 1 - HIGHWAY TO GAS', BASE_W/2, 38, C.white, 1, 'center');
+    drawText('HIGH SCORES', BASE_W/2, 16, C.yellow, 2, 'center');
 
-    const scores = loadScores();
-    const colRank = 30, colInit = 75, colScore = 210;
+    // Level tabs
+    const tab1Active = this.viewLevel === 'level1';
+    const tab1Color  = tab1Active ? C.green  : C.darkGray;
+    const tab2Color  = tab1Active ? C.darkGray : C.ltBlue;
+    const tabY = 34;
+    rect(20,          tabY, 100, 12, tab1Active ? 'rgba(51,170,68,0.25)'  : 'rgba(0,0,0,0.3)');
+    rect(BASE_W-120,  tabY, 100, 12, tab1Active ? 'rgba(0,0,0,0.3)' : 'rgba(170,221,255,0.25)');
+    border(20,         tabY, 100, 12, tab1Color);
+    border(BASE_W-120, tabY, 100, 12, tab2Color);
+    drawText('LEVEL 1', 70,         tabY + 3, tab1Color, 1, 'center');
+    drawText('LEVEL 2', BASE_W - 70, tabY + 3, tab2Color, 1, 'center');
+    if (Math.floor(this.t * 3) % 2 === 0)
+      drawText('TAB TO SWITCH', BASE_W/2, tabY + 3, C.darkGray, 1, 'center');
 
-    rect(20, 50, BASE_W-40, 1, C.gray);
-    drawText('RANK', colRank, 55, C.gray, 1);
-    drawText('NAME', colInit, 55, C.gray, 1);
-    drawText('SCORE', colScore, 55, C.gray, 1, 'right');
-    rect(20, 64, BASE_W-40, 1, C.gray);
+    const subLabel = this.viewLevel === 'level1' ? 'HIGHWAY TO GAS' : 'SKI TO THE LODGE';
+    const subColor = this.viewLevel === 'level1' ? C.green : C.ltBlue;
+
+    const scores   = loadScores(this.viewLevel);
+    const colRank  = 30, colInit = 75, colScore = BASE_W - 30;
+    const tableTop = 52;
+
+    rect(20, tableTop,     BASE_W-40, 1, C.gray);
+    drawText('RANK',  colRank,  tableTop + 5, C.gray, 1);
+    drawText('NAME',  colInit,  tableTop + 5, C.gray, 1);
+    drawText(subLabel, BASE_W/2, tableTop + 5, subColor, 1, 'center');
+    drawText('SCORE', colScore, tableTop + 5, C.gray, 1, 'right');
+    rect(20, tableTop + 14, BASE_W-40, 1, C.gray);
 
     if (this.loading) {
       if (Math.floor(this.t * 4) % 2 === 0)
         drawText('LOADING...', BASE_W/2, 130, C.gray, 1, 'center');
     } else if (scores.length === 0) {
       drawText('NO SCORES YET!', BASE_W/2, 120, C.gray, 2, 'center');
-      drawText('COLLECT DOLLARS TO SCORE POINTS!', BASE_W/2, 145, C.gray, 1, 'center');
+      drawText('PLAY THE LEVEL TO GET ON THE BOARD!', BASE_W/2, 145, C.gray, 1, 'center');
     } else {
-      for (let i=0; i<scores.length; i++) {
-        const s = scores[i];
-        const sy = 70 + i * 17;
+      for (let i = 0; i < scores.length; i++) {
+        const s  = scores[i];
+        const sy = tableTop + 20 + i * 16;
         const rowColor = i === 0 ? C.yellow : i < 3 ? C.white : C.gray;
         if (i === 0) {
-          rect(18, sy-1, BASE_W-36, 15, 'rgba(255,220,0,0.1)');
-          drawStar(colRank - 12, sy+4, 4, C.yellow);
+          rect(18, sy - 1, BASE_W - 36, 14, 'rgba(255,220,0,0.08)');
+          drawStar(colRank - 12, sy + 4, 4, C.yellow);
         }
-        drawText(`${i+1}.`, colRank, sy, rowColor, 1);
-        drawText(s.initials, colInit, sy, rowColor, 1);
+        drawText((i + 1) + '.', colRank, sy, rowColor, 1);
+        drawText(s.initials,    colInit, sy, rowColor, 1);
         drawText(formatScore(s.score) + ' PTS', colScore, sy, rowColor, 1, 'right');
       }
     }
 
-    if (Math.floor(this.t*2)%2) {
-      drawText('PRESS ESC OR ENTER TO GO BACK', BASE_W/2, BASE_H-22, C.gray, 1, 'center');
-    }
+    if (Math.floor(this.t * 2) % 2)
+      drawText('ENTER / ESC - BACK', BASE_W/2, BASE_H - 22, C.gray, 1, 'center');
   }
 };
 
@@ -962,6 +978,7 @@ const InitialsScene = {
   initials: ['A','A','A'],
   cursor: 0,
   score: 0,
+  level: 'level1',
   t: 0,
   done: false,
   init() {
@@ -970,7 +987,7 @@ const InitialsScene = {
     this.t = 0;
     this.done = false;
   },
-  setScore(pts) { this.score = pts; },
+  setScore(pts, level = 'level1') { this.score = pts; this.level = level; },
   update(dt) {
     this.t += dt;
     if (this.done) return;
@@ -988,8 +1005,9 @@ const InitialsScene = {
       if (this.cursor < 2) {
         this.cursor++;
       } else {
-        // Submit
-        addScore(this.initials.join(''), this.score);
+        // Submit score for the correct level, then show that level's board
+        addScore(this.initials.join(''), this.score, this.level);
+        HighScoreScene.viewLevel = this.level;
         this.done = true;
         setTimeout(() => setScene(HighScoreScene), 1500);
       }
@@ -1186,8 +1204,8 @@ const Level1Scene = {
           setScene(BonusIntroScene);
         }
         if (consumeKey('Escape')) {
-          if (isHighScore(this.finalScore)) {
-            InitialsScene.setScore(this.finalScore);
+          if (isHighScore(this.finalScore, 'level1')) {
+            InitialsScene.setScore(this.finalScore, 'level1');
             setScene(InitialsScene);
           } else {
             setScene(LevelSelectScene);
@@ -1967,8 +1985,8 @@ const BonusDreamScene = {
       this.t = 0;
       if (this.page >= this.pages.length) {
         const fs = BonusEndScene.finalScore;
-        if (isHighScore(fs)) { InitialsScene.setScore(fs); setScene(InitialsScene); }
-        else                  { setScene(HighScoreScene); }
+        if (isHighScore(fs, 'level1')) { InitialsScene.setScore(fs, 'level1'); setScene(InitialsScene); }
+        else { HighScoreScene.viewLevel = 'level1'; setScene(HighScoreScene); }
       }
     }
   },
@@ -2165,11 +2183,12 @@ const Level2Scene = {
       if (!this.showEndPrompt && this.finishTimer > 2.5) this.showEndPrompt = true;
       if (this.showEndPrompt) {
         if (consumeKey('Enter') || consumeKey('Space')) {
-          if (isHighScore(this.finalScore)) {
-            InitialsScene.setScore(this.finalScore);
+          if (isHighScore(this.finalScore, 'level2')) {
+            InitialsScene.setScore(this.finalScore, 'level2');
             setScene(InitialsScene);
           } else {
-            setScene(LevelSelectScene);
+            HighScoreScene.viewLevel = 'level2';
+            setScene(HighScoreScene);
           }
         }
         if (consumeKey('Escape')) setScene(LevelSelectScene);
@@ -2440,7 +2459,8 @@ function gameLoop(now) {
 }
 
 setScene(TitleScene);
-refreshScores(); // pre-load global leaderboard so isHighScore() is accurate
+refreshScores('level1'); // pre-load both leaderboards so isHighScore() is accurate
+refreshScores('level2');
 requestAnimationFrame(gameLoop);
 </script>
 </body>
